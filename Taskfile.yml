@@ -14,4 +14,4 @@ tasks:
     desc: "Run PyTest suite"
     deps: [deps]
     cmds:
-      - pytest -q tests/
+      - bash -c '. "$HOME/.elan/env" && export PYTHONPATH="$PWD" && pytest -q tests/'
