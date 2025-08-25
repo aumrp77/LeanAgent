@@ -1,5 +1,4 @@
 PR_TITLE = "[LeanAgent] Proofs"
-
 PR_BODY = """
 [LeanAgent](https://arxiv.org/abs/2410.06209) discovers a proof for a theorem with the `sorry` keyword.
 
@@ -7,10 +6,12 @@ PR_BODY = """
 
 <i>~LeanAgent - From the [LeanDojo](https://leandojo.org/) family</i>
 """
-
 TMP_BRANCH = "_LeanAgent"
-
 COMMIT_MESSAGE = "[LeanAgent] Proofs"
+
+
+MARK_START_SYMBOL = "<a>"
+MARK_END_SYMBOL = "</a>"
 
 # List of known repositories to process or skip
 # Feel free to remove any repos from this list if you would like to test on them

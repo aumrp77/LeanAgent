@@ -20,17 +20,7 @@ from constants import known_repositories, known_dead_repos, PR_TITLE, PR_BODY, T
 
 personal_access_token = os.environ.get("GITHUB_ACCESS_TOKEN")
 BATCH_SIZE = 4
-RAID_DIR = os.environ.get("RAID_DIR")
-os.environ["RAY_TMPDIR"] = f"{RAID_DIR}/tmp"
-repo_dir = f"{RAID_DIR}/repos_new"
-
-DATA_DIR = f"{RAID_DIR}/data"
-CHECKPOINT_DIR = f"{RAID_DIR}/checkpoints"
-EVAL_RESULTS_FILE_PATH = f"{RAID_DIR}/eval_results.txt"
-DB_FILE_NAME = "db_file.txt"
-PROOF_LOG_FILE_NAME = f"{RAID_DIR}/proof_log.txt"
-ENCOUNTERED_THEOREMS_FILE = f"{RAID_DIR}/encountered_theorems.pkl"
-FISHER_DIR = f"{RAID_DIR}/fisher"  # Optional
+from filenames import REPO_DIR, DATA_DIR
 
 
 def clone_repo(repo_url):
@@ -39,7 +29,8 @@ def clone_repo(repo_url):
     repo_name = "/".join(repo_url.split("/")[-2:]).replace(".git", "")
     logger.info(f"Cloning {repo_url}")
     logger.info(f"Repo name: {repo_name}")
-    repo_name = os.path.join(repo_dir, repo_name)
+    repo_name = os.path.join(REPO_DIR, repo_name)
+    
     if os.path.exists(repo_name):
         print(f"Deleting existing repository directory: {repo_name}")
         shutil.rmtree(repo_name)
@@ -54,7 +45,7 @@ def clone_repo(repo_url):
 def branch_exists(repo_name, branch_name):
     """Check if a branch exists in a git repository."""
     proc = subprocess.run(
-        ["git", "-C", repo_name, "branch", "-a"], capture_output=True, text=True
+        ["git", "-C", repo_name, "branch", "-a"], stdout=subprocess.PIPE, text=True
     )
     branches = proc.stdout.split("\n")
     local_branch = branch_name
@@ -157,130 +148,125 @@ def ensure_inside_git():
         
 def get_compatible_commit(url):
     """Find the most recent commit with a Lean version that LeanAgent supports."""
-    try:
-        process = subprocess.Popen(["git", "ls-remote", url], stdout=subprocess.PIPE)
-        stdout, stderr = process.communicate()
-        latest_commit = re.split(r"\t+", stdout.decode("utf-8"))[0]
-        logger.info(f"Latest commit: {latest_commit}")
+    if "mathlib4" in url or "SciLean" in url or "pfr" in url:
+        if "mathlib4" in url:
+            sha = "2b29e73438e240a427bcecc7c0fe19306beb1310"
+            v = "v4.8.0"
+        elif "SciLean" in url:
+            sha = "22d53b2f4e3db2a172e71da6eb9c916e62655744"
+            v = "v4.7.0"
+        elif "pfr" in url:
+            sha = "fa398a5b853c7e94e3294c45e50c6aee013a2687"
+            v = "v4.8.0-rc1"
+        return sha, v
+    else:
+        with open(os.path.join("RAID", "data", "repo_info_compatible.json"), "r") as f:
+            try:
+                repos_and_compatible_commits = json.load(f)
+            except json.JSONDecodeError:
+                repos_and_compatible_commits = []
+        
+        if url in [repo["url"] + ".git" for repo in repos_and_compatible_commits if repo["commit"]]:
+            logger.info(f"Repository {url} already has a compatible commit.")
+            return None, None
+            
+        try:
+            process = subprocess.Popen(["git", "ls-remote", url], stdout=subprocess.PIPE)
+            stdout, stderr = process.communicate()
+            latest_commit = re.split(r"\t+", stdout.decode("utf-8"))[0]
+            logger.info(f"Latest commit: {latest_commit}")
 
-        new_url = url.replace(".git", "")
-        logger.info(f"Creating LeanGitRepo for {new_url}")
-        
-        repo = LeanGitRepo(new_url, latest_commit)
-        logger.info(f"Getting config for {url}")
-        
-        config = repo.get_config("lean-toolchain")
-        v = generate_benchmark_lean4.get_lean4_version_from_config(config["content"])
-        
-        if generate_benchmark_lean4.is_supported_version(v):
-            logger.info(f"Latest commit compatible for url {url}")
-            return latest_commit, v
-
-        logger.info(f"Searching for compatible commit for {url}")
-        
-        ensure_inside_git()
-        ZZ
-        process = subprocess.Popen(
-            ["git", "fetch", "--depth=1000000", url],  # Fetch commits
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        logger.info(f"Fetching commits for {url}")
-        _, stderr = process.communicate()
-        
-        if process.returncode != 0:
-            raise Exception(f"Git fetch command failed: {stderr.decode('utf-8')}")
-        
-        logger.info(f"Fetched commits for {url}")
-        
-        process = subprocess.Popen(
-            ["git", "log", "--format=%H", "FETCH_HEAD"],  # Get list of commits
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        
-        logger.info(f"Getting list of commits for {url}")
-        
-        stdout, stderr = process.communicate()
-        if process.returncode != 0:
-            raise Exception(f"Git log command failed: {stderr.decode('utf-8')}")
-        
-        commits = stdout.decode("utf-8").strip().split("\n")
-        logger.info(f"Found {len(commits)} commits for {url}")
-        
-        new_url = url.replace(".git", "")
-        
-        repo_human_name = "/".join(new_url.split("/")[-2:])
-        
-        # Delete repo if it exists, because it might be checked out to a different commit
-        if os.path.exists(os.path.join("repos", repo_human_name)):
-            shutil.rmtree(os.path.join("repos", repo_human_name))
-        
-        subprocess.run(["git", "clone", url, os.path.join("repos", repo_human_name)], check=True)
-
-        for commit in commits:
-            logger.info(f"Checking commit {commit} for {url}")
-            # Check out the commit locally
-            subprocess.run(["git", "-C", os.path.join("repos", repo_human_name), "checkout", commit], check=True)
-            import ipdb; ipdb.set_trace()
-            repo = LeanGitRepo.from_path(os.path.join(os.getcwd(), "repos", repo_human_name), commit)
+            new_url = url.replace(".git", "")
+            logger.info(f"Creating LeanGitRepo for {new_url}")
+            
+            repo = LeanGitRepo(new_url, latest_commit)
+            logger.info(f"Getting config for {url}")
+            
             config = repo.get_config("lean-toolchain")
             v = generate_benchmark_lean4.get_lean4_version_from_config(config["content"])
+            
             if generate_benchmark_lean4.is_supported_version(v):
-                logger.info(f"Found compatible commit {commit} for {url}")
-                return commit, v
+                logger.info(f"Latest commit compatible for url {url}")
+                return latest_commit, v
 
-        raise Exception("No compatible commit found")
-
-    except Exception as e:
-        logger.info(f"Error in get_compatible_commit: {str(e)}")
-        return None, None
+            logger.info(f"Searching for compatible commit for {url}")
+            
+            ensure_inside_git()
+            process = subprocess.Popen(
+                ["git", "fetch", "--depth=1000000", url],  # Fetch commits
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            
+            logger.info(f"Fetching commits for {url}")
+            _, stderr = process.communicate()
+            
+            if process.returncode != 0:
+                raise Exception(f"Git fetch command failed: {stderr.decode('utf-8')}")
+            
+            logger.info(f"Fetched commits for {url}")
+            
+            process = subprocess.Popen(
+                ["git", "log", "--format=%H", "FETCH_HEAD"],  # Get list of commits
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            
+            logger.info(f"Getting list of commits for {url}")
+            
+            stdout, stderr = process.communicate()
+            if process.returncode != 0:
+                raise Exception(f"Git log command failed: {stderr.decode('utf-8')}")
+            
+            commits = stdout.decode("utf-8").strip().split("\n")
+            logger.info(f"Found {len(commits)} commits for {url}")
+            
+            new_url = url.replace(".git", "")
+            
+            repo_human_name = "/".join(new_url.split("/")[-2:])
+            
+            # Delete repo if it exists, because it might be checked out to a different commit
+            if os.path.exists(os.path.join("repos", repo_human_name)):
+                shutil.rmtree(os.path.join("repos", repo_human_name))
+            
+            subprocess.run(["git", "clone", url, os.path.join("repos", repo_human_name)], check=True)
+            for commit in commits:
+                logger.info(f"Checking commit {commit} for {url}")
+                # Check out the commit locally
+                subprocess.run(["git", "-C", os.path.join("repos", repo_human_name), "checkout", commit], capture_output=False, check=True)
+                
+                # Check the lean-toolchain file manually, avoid calling LeanGitRepo because it makes a lot of web requests
+                with open(os.path.join("repos", repo_human_name, "lean-toolchain"), "r") as f:
+                    config_content = f.read()
+                
+                v = generate_benchmark_lean4.get_lean4_version_from_config(config_content)
+                if generate_benchmark_lean4.is_supported_version(v):
+                    logger.info(f"Found compatible commit {commit} for {url}")
+                    repos_and_compatible_commits.append({"url": url.replace(".git", ""), "commit": commit, "version": v})
+                    with open(os.path.join(DATA_DIR, "repo_info_compatible.json"), "w") as f:
+                        json.dump(repos_and_compatible_commits, f, indent=2)
+                        f.flush()
+                        
+                    return commit, v
+            raise Exception("No compatible commit found")
+        except Exception as e:
+            logger.info(f"Error in get_compatible_commit: {str(e)}")
+            return None, None
 
 
 def find_and_save_compatible_commits(repo_info_file, lean_git_repos):
-    """Finds compatible commits for various repositories"""
-    with open(repo_info_file, "r") as repo_compatibility_file:
-        updated_repos = json.loads(repo_compatibility_file)
-    
-        for repo in lean_git_repos:
-            url = repo.url
-            if not url.endswith(".git"):
-                url = url + ".git"
+    """Finds and saves compatible commits for various repositories"""
+    for repo in lean_git_repos:
+        url = repo.url
+        if not url.endswith(".git"):
+            url = url + ".git"
 
-            sha = None
-            v = None
-            
-            # TODO: Check these
-            if "mathlib4" in url:
-                sha = "2b29e73438e240a427bcecc7c0fe19306beb1310"
-                v = "v4.8.0"
-            elif "SciLean" in url:
-                sha = "22d53b2f4e3db2a172e71da6eb9c916e62655744"
-                v = "v4.7.0"
-            elif "pfr" in url:
-                sha = "fa398a5b853c7e94e3294c45e50c6aee013a2687"
-                v = "v4.8.0-rc1"
-            else:
-                # Check if it's in any element
-                for elem in updated_repos:
-                    if url.replace(".git", "") == elem["url"]:
-                        continue
-                    
-                sha, v = get_compatible_commit(url)
-            
-
-            # Always write to json, even for null repos
-            updated_repos.append(
-                {"url": url.replace(".git", ""), "commit": sha if sha else None, "version": v if v else None}
-            )
-            
-            if not sha:
-                logger.info(f"Failed to find a compatible commit for {url}")
-
-        # Write per repo in case of interrupt
-        with open(repo_info_file, "w") as f:
-            json.dump(updated_repos, f)
-
+        # Saves the compatible commit in repo_info_file
+        _sha, _v = get_compatible_commit(url)
+        
+    with open(repo_info_file, "r") as repos_and_compatible_commits_f:
+        updated_repos = json.load(repos_and_compatible_commits_f)
+        
     return updated_repos
 
 
@@ -289,7 +275,7 @@ def search_github_repositories(lean_git_repos, repos, language="Lean", num_repos
     headers = {"Authorization": personal_access_token}
     query_params = {
         "q": f"language:{language}",
-        "sort": "stars",
+        "sort": "stars",  # What can this be?
         "order": "desc",
         "per_page": 100,
     }
@@ -362,17 +348,7 @@ def add_repo_to_database(dynamic_database_json_path, repo, db):
         url = url + ".git"
     logger.info(f"\n\nProcessing {url}")
 
-    if "mathlib4" in url:
-        sha = "2b29e73438e240a427bcecc7c0fe19306beb1310"
-        v = "v4.8.0"
-    elif "SciLean" in url:
-        sha = "22d53b2f4e3db2a172e71da6eb9c916e62655744"
-        v = "v4.7.0"
-    elif "pfr" in url:
-        sha = "fa398a5b853c7e94e3294c45e50c6aee013a2687"
-        v = "v4.8.0-rc1"
-    else:
-        sha, v = get_compatible_commit(url)
+    sha, v = get_compatible_commit(url)
 
     if not sha:
         logger.info(f"Failed to find a compatible commit for {url}")
@@ -382,25 +358,29 @@ def add_repo_to_database(dynamic_database_json_path, repo, db):
     url = url.replace(".git", "")
     repo = LeanGitRepo(url, sha)
     dir_name = repo.url.split("/")[-1] + "_" + sha
-    dst_dir = RAID_DIR + "/" + DATA_DIR + "/" + dir_name
+    dst_dir = os.path.join(DATA_DIR, dir_name)
     logger.info(f"Generating benchmark at {dst_dir}")
     traced_repo, _, _, total_theorems = generate_benchmark_lean4.main(
         repo.url, sha, dst_dir
     )
+    
     if not traced_repo:
         logger.info(f"Failed to trace {url}")
         return None
-    if total_theorems < 3 * BATCH_SIZE:  # Should be enough theorems for train/val/test
-        logger.info(f"No theorems found in {url}")
+    
+    if total_theorems < 3 * BATCH_SIZE:  # Require enough theorems for train/val/test
+        logger.info(f"Not enough theorems found in {url}")
         return None
+    
     logger.info(f"Finished generating benchmark at {dst_dir}")
 
     # Add the new repo to the dynamic database
     config = repo.get_config("lean-toolchain")
     v = generate_benchmark_lean4.get_lean4_version_from_config(config["content"])
-    theorems_folder = dst_dir + "/random"
-    premise_files_corpus = dst_dir + "/corpus.jsonl"
-    files_traced = dst_dir + "/traced_files.jsonl"
+    theorems_folder = os.path.join(dst_dir, "theorems")
+    premise_files_corpus = os.path.join(dst_dir, "corpus.jsonl")
+    files_traced = os.path.join(dst_dir, "traced_files.jsonl")
+    
     pr_url = None
     data = {
         "url": repo.url,
@@ -420,9 +400,12 @@ def add_repo_to_database(dynamic_database_json_path, repo, db):
     repo = Repository.from_dict(data)
     logger.info("Before adding new repo:")
     db.print_database_contents()
-    db.add_repository(repo)
+    
+    
     logger.info("After adding new repo:")
+    db.add_repository(repo)
     db.print_database_contents()
+    
     db.to_json(dynamic_database_json_path)
     return "Done"
 
@@ -532,14 +515,14 @@ def load_sorted_repos(file_path: str) -> List[Tuple[str, str, str]]:
 
 def write_skip_file(repo_url):
     """Writes a repository URL to a file to skip it."""
-    skip_file_path = os.path.join(RAID_DIR, DATA_DIR, "skip_repo.txt")
+    skip_file_path = os.path.join(DATA_DIR, "skip_repo.txt")
     with open(skip_file_path, "w") as f:
         f.write(repo_url)
 
 
 def should_skip_repo():
     """Checks if a repository should be skipped."""
-    skip_file_path = os.path.join(RAID_DIR, DATA_DIR, "skip_repo.txt")
+    skip_file_path = os.path.join(DATA_DIR, "skip_repo.txt")
     if os.path.exists(skip_file_path):
         with open(skip_file_path, "r") as f:
             repo_url = f.read().strip()

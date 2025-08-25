@@ -96,7 +96,6 @@ def main():
             # Save the FIM if needed
             if fisher_trainer.is_global_zero:
                 fisher_file_path = os.path.join(
-                    RAID_DIR,
                     FISHER_DIR,
                     f"fisher_info_{new_data_path.split('/')[-1]}_distributed.pkl",
                 )

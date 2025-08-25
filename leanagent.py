@@ -9,7 +9,7 @@ import traceback
 
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Set, Tuple
 
 
 import numpy as np
@@ -36,23 +36,14 @@ from retrieval.main import run_cli
 from retrieval.model import PremiseRetriever
 
 from git_utils import find_and_save_compatible_commits, search_github_repositories, should_skip_repo, add_repo_to_database, sort_repositories_by_difficulty, save_sorted_repos
+from filenames import DATA_DIR, RAID_DIR, CHECKPOINT_DIR, EVAL_RESULTS_FILE_PATH, DB_FILE_NAME, PROOF_LOG_FILE_NAME, ENCOUNTERED_THEOREMS_FILE, FISHER_DIR
 
 # Set the seed for reproducibility
 personal_access_token = os.environ.get("GITHUB_ACCESS_TOKEN")
 
 random.seed(3407)  # https://arxiv.org/abs/2109.08203
 BATCH_SIZE = 4
-RAID_DIR = os.environ.get("RAID_DIR")
-os.environ["RAY_TMPDIR"] = f"{RAID_DIR}/tmp"
-repo_dir = f"{RAID_DIR}/repos_new"
 
-DATA_DIR = f"{RAID_DIR}/data"
-CHECKPOINT_DIR = f"{RAID_DIR}/checkpoints"
-EVAL_RESULTS_FILE_PATH = f"{RAID_DIR}/eval_results.txt"
-DB_FILE_NAME = "db_file.txt"
-PROOF_LOG_FILE_NAME = f"{RAID_DIR}/proof_log.txt"
-ENCOUNTERED_THEOREMS_FILE = f"{RAID_DIR}/encountered_theorems.pkl"
-FISHER_DIR = f"{RAID_DIR}/fisher"  # Optional
 
 repos_for_merged_dataset = []
 repos_for_proving = []
@@ -74,6 +65,7 @@ def _eval(data, preds_map) -> Tuple[float, float, float]:
                 pred = preds_map[key]
             else:
                 continue
+            
             all_pos_premises = set(pred["all_pos_premises"])
             if len(all_pos_premises) == 0:
                 continue
@@ -111,14 +103,14 @@ def load_fisher_information(file_path):
 
 def find_latest_checkpoint():
     """Finds the most recent checkpoint."""
-    checkpoint_dir = RAID_DIR + "/" + CHECKPOINT_DIR
     all_checkpoints = [
-        os.path.join(checkpoint_dir, f)
-        for f in os.listdir(checkpoint_dir)
+        os.path.join(CHECKPOINT_DIR, f)
+        for f in os.listdir(CHECKPOINT_DIR)
         if f.endswith(".ckpt")
     ]
-    if not all_checkpoints:
+    if len(all_checkpoints) == 0:
         raise FileNotFoundError("No checkpoints found.")
+    
     latest_checkpoint = max(all_checkpoints, key=os.path.getmtime)
     logger.info(f"Using the latest checkpoint: {latest_checkpoint}")
     return latest_checkpoint
@@ -126,14 +118,14 @@ def find_latest_checkpoint():
 
 def find_latest_fisher():
     """Finds the most recent Fisher Information Matrix."""
-    fisher_dir = RAID_DIR + "/" + FISHER_DIR
     all_fisher = [
-        os.path.join(fisher_dir, f)
-        for f in os.listdir(fisher_dir)
+        os.path.join(FISHER_DIR, f)
+        for f in os.listdir(FISHER_DIR)
         if f.endswith(".pkl")
     ]
-    if not all_fisher:
+    if len(all_fisher) == 0:
         raise FileNotFoundError("No Fisher Information Matrices found.")
+    
     latest_fisher = max(all_fisher, key=os.path.getmtime)
     logger.info(f"Using the latest Fisher Information Matrix: {latest_fisher}")
     return latest_fisher
@@ -401,7 +393,7 @@ def get_repos(curriculum_learning: bool, num_repos: int, dynamic_database_json_p
     global lean_git_repos
     global repos
     # If curriculum learning is enabled, initialize repositories and sort them by difficulty
-    repo_info_file = os.path.join(RAID_DIR, DATA_DIR, "repo_info_compatible.json")
+    repo_info_file = os.path.join(DATA_DIR, "repo_info_compatible.json")
     # Check if the current process is the main one
     is_main_process = int(os.environ.get("LOCAL_RANK", "0")) == 0
     if curriculum_learning:
@@ -528,7 +520,7 @@ def main():
 
         lean_git_repos, repos, updated_repos = get_repos(curriculum_learning, num_repos, dynamic_database_json_path, db)
 
-        repo_info_file = os.path.join(RAID_DIR, DATA_DIR, "repo_info_compatible.json")
+        repo_info_file = os.path.join(DATA_DIR, "repo_info_compatible.json")
         # All processes wait for the file to be created and then read from it
         # TODO: Fix with a semaphore or file lock
         max_attempts = 30
@@ -703,7 +695,7 @@ def main():
                         if is_main_process:
                             logger.info("Removing skip file")
                             skip_file_path = os.path.join(
-                                RAID_DIR, DATA_DIR, "skip_repo.txt"
+                                DATA_DIR, "skip_repo.txt"
                             )
                             os.remove(skip_file_path)
                         continue
