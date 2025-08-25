@@ -3,6 +3,7 @@ retrieval/bm25
 .idea/
 .DS_Store
 RAID/
+repos
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

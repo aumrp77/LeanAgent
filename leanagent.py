@@ -1,47 +1,45 @@
-# import all the necessary libraries
 import json
-import math
 import os
 import pickle
 import random
-import re
-import shutil
-import subprocess
+
 import sys
 import time
 import traceback
-from collections import defaultdict
-from copy import copy
+
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 
-import lean_dojo
+
 import numpy as np
 import pytorch_lightning as pl
 import ray
-import requests
+
 import torch
 from lean_dojo import *
 from lean_dojo import LeanGitRepo, Pos
 from lean_dojo import Theorem
 from lean_dojo import Theorem as LeanDojoTheorem
-from lean_dojo import is_available_in_cache
+
 from loguru import logger
 from pytorch_lightning import seed_everything
-from pytorch_lightning.callbacks import (Callback, EarlyStopping,
-                                         LearningRateMonitor, ModelCheckpoint)
+from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.strategies import DDPStrategy
 from tqdm import tqdm
 
 import generate_benchmark_lean4
-from dynamic_database import *
+from dynamic_database import AnnotatedTactic, Theorem, DynamicDatabase
 from prover.proof_search import DistributedProver, SearchResult, Status
 from retrieval.datamodule import RetrievalDataModule
 from retrieval.main import run_cli
 from retrieval.model import PremiseRetriever
 
+from git_utils import find_and_save_compatible_commits, search_github_repositories, should_skip_repo, add_repo_to_database, sort_repositories_by_difficulty, save_sorted_repos
+
 # Set the seed for reproducibility
+personal_access_token = os.environ.get("GITHUB_ACCESS_TOKEN")
+
 random.seed(3407)  # https://arxiv.org/abs/2109.08203
 BATCH_SIZE = 4
 RAID_DIR = os.environ.get("RAID_DIR")
@@ -58,512 +56,8 @@ FISHER_DIR = f"{RAID_DIR}/fisher"  # Optional
 
 repos_for_merged_dataset = []
 repos_for_proving = []
-
-# List of known repositories to process or skip
-# Feel free to remove any repos from this list if you would like to test on them
-known_repositories = [
-    "leanprover-community/mathlib4",  # ReProver is trained on this
-    "leanprover-community/batteries",  # functional programming instead of math
-    "leanprover-community/aesop",
-    "leanprover/lean4",
-    "leanprover-community/mathlib",  # Mathlib3 version
-    "leanprover-community/mathlib3",
-    "leanprover/std4",  # moved to batteries
-    "leanprover-community/duper",  # functional programming instead of math
-    "leanprover/lake",
-    "openai/lean-gym",
-    "leanprover-community/lean4-metaprogramming-book",
-    "kmill/lean4-raytracer",  # no theorems
-    "argumentcomputer/yatima",  # trace problems
-    "ImperialCollegeLondon/formalising-mathematics-2024",  # trace problems
-    "leanprover-community/ProofWidgets4",  # trace problems
-    "leanprover/verso",  # trace problems
-    "leanprover-community/NNG4",  # trace problems
-    "ufmg-smite/lean-smt",  # fails to trace due to windows-style line endings
-    "teorth/symmetric_project",  # no compatible commit
-    "cmu-l3/llmlean",  # irrelevant + only 4 theorems
-    "PatrickMassot/GlimpseOfLean",  # strange trace problems with _parse_deps
-    "avigad/lamr",  # trace problems
-    "leanprover-community/quote4",  # no theorems
-    "leanprover-community/iris-lean",  # trace problems
-    "aripiprazole/rinha",  # incompatible commit
-    "leanprover/lean4-cli",  # no theorems
-    "leanprover/LeanInk",  # no theorems
-    "leanprover-community/lean-auto",
-    "leanprover-community/repl",  # no theorems
-    "leanprover/doc-gen4",  # no theorems
-    "leanprover/SampCert",  # trace problems
-    "nomeata/loogle",
-    "risc0/risc0-lean4",
-    "PatrickMassot/verbose-lean4",  # no theorems
-    "tydeu/lean4-alloy",  # no theorems
-    "leanprover/leansat",  # deprecated
-    "BoltonBailey/formal-snarks-project",  # two theorems
-    "dwrensha/lean4-maze",  # two theorems
-    "leanprover-community/mathport",  # irrelevant
-    "argumentcomputer/LSpec",  # one theorem
-    "reaslab/jixia",  # no theorems
-    "riccardobrasca/flt3",  # no theorems
-    "dwrensha/animate-lean-proofs",  # irrelevant
-    "lean-ja/lean-by-example",  # irrelevant
-    "NethermindEth/Clear",  # no theorems
-    "fgdorais/lean4-parser",  # irrelevant
-    "semorrison/lean-training-data",  # irrelevant
-    "verse-lab/lean-ssr",  # irrelevant
-    "GaloisInc/lean-llvm",  # irrelevant
-    "argumentcomputer/Wasm.lean",  # irrelevant
-    "NethermindEth/EVMYulLean",  # irrelevant
-    "rwbarton/advent-of-lean-4",  # irrelevant
-    "leanprover-community/tutorials4",  # irrelevant
-    "haruhisa-enomoto/mathlib4-all-tactics",  # irrelevant
-    "leanprover/LNSym",
-    "leanprover-community/flt-regular",
-    "opencompl/lean-mlir-old",
-    "rami3l/plfl",
-    "HEPLean/HepLean",
-    "forked-from-1kasper/ground_zero",
-    "verified-optimization/CvxLean",
-    "leanprover-community/sphere-eversion",
-    "optsuite/optlib",
-    "YaelDillies/LeanCamCombi",
-    "JamesGallicchio/LeanColls",
-    "T-Brick/c0deine",
-    "jjdishere/EG",
-    "alexkeizer/QpfTypes",
-    "fpvandoorn/LeanCourse23",
-    "marcusrossel/lean-egg",
-    "reilabs/proven-zk",
-    "algebraic-dev/soda",
-    "leanprover-community/llm",
-    "dignissimus/Untangle",
-    "argumentcomputer/Megaparsec.lean",
-    "emilyriehl/infinity-cosmos",
-    "BartoszPiotrowski/lean-premise-selection",
-    "djvelleman/HTPILeanPackage",
-    "girving/ray",
-    "Anderssorby/SDL.lean",
-    "pandaman64/lean-regex",
-    "brown-cs22/CS22-Lean-2023",
-    "hhu-adam/GameSkeleton",
-    "FR-vdash-bot/Algorithm",
-    "PeterKementzey/graph-library-for-lean4",
-    "arthurpaulino/LeanMySQL",
-    "arthurpaulino/NumLean",
-    "FormalSAT/trestle",
-    "nomeata/lean-wf-induct",
-    "leanprover/lean4checker",
-    "IPDSnelting/tba-2022",
-    "digama0/mm-lean4",
-    "KislyjKisel/Raylib.lean",
-    "algebraic-dev/melp",
-    "hhu-adam/Robo",  # same as other tutorials but has lots of sorries
-    "hargoniX/socket.lean",
-    "kovach/etch",
-    "damek/gd-lean",
-    "0art0/lean-slides",
-    "forked-from-1kasper/lean4-categories",
-    "katydid/proofs",
-    "alexjbest/leaff",
-    "sinhp/Poly",
-    "lftcm2023/lftcm2023",  # same as other tutorials but has lots of sorries
-    "lean-ja/lean99",
-    "leanprover/SHerLOC",
-    "Seasawher/mdgen",
-    "opencompl/egg-tactic-code",
-    "david-christiansen/ssft24",
-    "T-Brick/lean2wasm",
-    "hargoniX/cpdt-lean",
-    "jsm28/AperiodicMonotilesLean",
-    "draperlaboratory/ELFSage",
-    "rookie-joe/automatic-lean4-compilation",
-    "madvorak/fecssk",
-    "david-christiansen/bob24",
-    "awodey/joyal",
-    "BrownCS1951x/fpv2023",  # same as other tutorials but has lots of sorries
-    "paulch42/lean-spec",
-    "siddhartha-gadgil/MetaExamples",
-    "dannypsnl/violet",
-    "arthurpaulino/LeanREPL",
-    "Kha/do-supplement",
-    "joehendrix/lean-sat-checker",
-    "ammkrn/timelib",
-    "kmill/LeanTeX",
-    "leanprover/lean4export",
-    "leanprover-community/mathlib3port",
-    "brown-cs22/CS22-Lean-2024",  # same as other tutorials but has lots of sorries
-    "T-Brick/lean-wasm",
-    "crabbo-rave/Soup",
-    "argumentcomputer/RustFFI.lean",
-    "suhr/tmath",
-    "leanprover/leanbv",
-    "arthurpaulino/FxyLang",
-    "SchrodingerZhu/LeanGccBackend",
-    "lecopivo/lean4-karray",
-    "ImperialCollegeLondon/M1F-explained",
-    "proost-assistant/ProostLean",
-    "DavePearce/LeanEVM",
-    "algebraic-dev/ash",
-    "FormalizedFormalLogic/Arithmetization",
-    "cmu-l3/ntp-toolkit",
-    "dwrensha/tryAtEachStep",
-    "yangky11/lean4-example",
-    "T-Brick/DateTime",
-    "model-checking/rust-lean-models",
-    "MichaelStollBayreuth/EulerProducts",
-    "hargoniX/Flame",
-    "argumentcomputer/Http.lean",
-    "madvorak/vcsp",
-    "teorth/newton",
-    "apnelson1/Matroid",
-    "smorel394/TS1",
-    "ianjauslin-rutgers/pythagoras4",
-    "mortarsanjaya/IMOSLLean4",
-    "dupuisf/BibtexQuery",
-    "nomeata/lean-calcify",
-    "argumentcomputer/FFaCiL.lean",
-    "javra/iit",
-    "arthurpaulino/viper",
-    "lindy-labs/aegis",
-    "PatrickMassot/NNG4",
-    "argumentcomputer/YatimaStdLib.lean",
-    "fgdorais/lean4-unicode-basic",
-    "mhuisi/Uniq",
-    "Kha/macro-supplement",
-    "chenjulang/rubikcubegroup",
-    "arthurpaulino/LeanMusic",
-    "argumentcomputer/Ipld.lean",
-    "Odomontois/advent2022-lean",
-    "kbuzzard/IISc-experiments",  # same as other tutorials but has lots of sorries
-    "ykonstant1/InfinitePrimes",
-    "alexkassil/natural_number_game_lean4",
-    "seewoo5/lean-poly-abc",
-    "rah4927/lean-dojo-mew",
-    "siddhartha-gadgil/proofs-and-programs-2023",
-    "PatrickMassot/lean4-game-server",
-    "knowsys/Formale-Systeme-in-LEAN",  # same as other tutorials but has lots of sorries
-    "katydid/symbolic-automatic-derivatives",
-    "girving/interval",
-    "ImperialCollegeLondon/group-theory-experiments",
-    "knowsys/CertifyingDatalog",
-    "bergmannjg/leanCurl",
-    "vasnesterov/HadwigerNelson",
-    "FWuermse/lean-postgres",
-    "leanprover-community/import-graph",
-    "Human-Oriented-ATP/lean-tactics",  # more about tactics than premises
-    "paulcadman/lean4-leetcode",
-    "argumentcomputer/Lurk.lean",
-    "AlexDuchnowski/rubiks-cube",
-    "SchrodingerZhu/lean-gccjit",
-    "JamesGallicchio/http",
-    "jtristan/UnicodeSkipListTableExample",
-    "adomani/MA4N1_2023",  # same as other tutorials but has lots of sorries
-    "remimimimimi/leansec",
-    "hhu-adam/lean-i18n",
-    "RemyDegenne/testing-lower-bounds",
-    "mariainesdff/LocalClassFieldTheory",
-    "AviCraimer/relational-calculus-library-lean4",
-    "JLimperg/regensburg-itp-school-2023",
-    "jaalonso/Calculemus2",
-    "mseri/BET",
-    "xubaiw/Reservoir.lean",
-    "hargoniX/nest-core",
-    "siddhartha-gadgil/Polylean",
-    "MichaelStollBayreuth/Weights",
-    "sanchace/FRACTRAN",
-    "argumentcomputer/Poseidon.lean",
-    "madvorak/chomsky",
-    "T-Brick/ControlFlow",
-    "pa-ba/guarded-lean",
-]
-
-repos = []
 lean_git_repos = []
-personal_access_token = os.environ.get("GITHUB_ACCESS_TOKEN")
-
-PR_TITLE = "[LeanAgent] Proofs"
-
-PR_BODY = """
-[LeanAgent](https://arxiv.org/abs/2410.06209) discovers a proof for a theorem with the `sorry` keyword.
-
----
-
-<i>~LeanAgent - From the [LeanDojo](https://leandojo.org/) family</i>
-"""
-
-TMP_BRANCH = "_LeanAgent"
-
-COMMIT_MESSAGE = "[LeanAgent] Proofs"
-
-
-def clone_repo(repo_url):
-    """Clone a git repository and return the path to the repository and its sha."""
-    repo_name = "/".join(repo_url.split("/")[-2:]).replace(".git", "")
-    logger.info(f"Cloning {repo_url}")
-    logger.info(f"Repo name: {repo_name}")
-    repo_name = repo_dir + "/" + repo_name
-    if os.path.exists(repo_name):
-        print(f"Deleting existing repository directory: {repo_name}")
-        shutil.rmtree(repo_name)
-    subprocess.run(["git", "clone", repo_url, repo_name])
-    process = subprocess.Popen(["git", "ls-remote", repo_url], stdout=subprocess.PIPE)
-    stdout, stderr = process.communicate()
-    sha = re.split(r"\t+", stdout.decode("utf-8"))[0]
-    return repo_name, sha
-
-
-def branch_exists(repo_name, branch_name):
-    """Check if a branch exists in a git repository."""
-    proc = subprocess.run(
-        ["git", "-C", repo_name, "branch", "-a"], capture_output=True, text=True
-    )
-    branches = proc.stdout.split("\n")
-    local_branch = branch_name
-    remote_branch = f"remote/{branch_name}"
-    return any(
-        branch.strip().endswith(local_branch) or branch.strip().endswith(remote_branch)
-        for branch in branches
-    )
-
-
-def create_or_switch_branch(repo_name, branch_name, base_branch):
-    """Create a branch in a git repository if it doesn't exist, or switch to it if it does."""
-    if not branch_exists(repo_name, branch_name):
-        subprocess.run(
-            ["git", "-C", repo_name, "checkout", "-b", branch_name], check=True
-        )
-    else:
-        subprocess.run(["git", "-C", repo_name, "checkout", branch_name], check=True)
-        subprocess.run(
-            [
-                "git",
-                "-C",
-                repo_name,
-                "merge",
-                base_branch,
-                "-m",
-                f"Merging {branch_name} into {base_branch}",
-            ],
-            check=True,
-        )
-
-
-def commit_changes(repo_name, commit_message):
-    """Commit changes to a git repository."""
-    status = subprocess.run(
-        ["git", "-C", repo_name, "status", "--porcelain"],
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    if status == "":
-        print("No changes to commit.")
-        return False
-    subprocess.run(["git", "-C", repo_name, "add", "."], check=True)
-    subprocess.run(["git", "-C", repo_name, "commit", "-m", commit_message], check=True)
-    return True
-
-
-def push_changes(repo_name, branch_name):
-    """Push changes to a git repository."""
-    subprocess.run(
-        ["git", "-C", repo_name, "push", "-u", "origin", branch_name], check=True
-    )
-
-
-def get_default_branch(repo_full_name):
-    """Get the default branch of a repository (default `main`)."""
-    url = f"https://api.github.com/repos/{repo_full_name}"
-    headers = {
-        "Authorization": f"token {personal_access_token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        return response.json()["default_branch"]
-    else:
-        logger.info(f"Failed to get default branch for {repo_full_name}")
-        return "main"
-
-
-def create_pull_request(repo_full_name, title, body, head_branch):
-    """Create a pull request in a repository."""
-    base_branch = get_default_branch(repo_full_name)
-    url = f"https://api.github.com/repos/{repo_full_name}/pulls"
-    headers = {
-        "Authorization": f"token {personal_access_token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
-    data = {"title": title, "body": body, "head": head_branch, "base": base_branch}
-    response = requests.post(url, headers=headers, json=data)
-    if response.status_code == 201:
-        print("Pull request created successfully: " + response.json()["html_url"])
-        return response.json()["html_url"]
-    else:
-        print("Failed to create pull request", response.text)
-        return ""
-
-
-def get_compatible_commit(url):
-    """Find the most recent commit with a Lean version that LeanAgent supports."""
-    try:
-        process = subprocess.Popen(["git", "ls-remote", url], stdout=subprocess.PIPE)
-        stdout, stderr = process.communicate()
-        latest_commit = re.split(r"\t+", stdout.decode("utf-8"))[0]
-        logger.info(f"Latest commit: {latest_commit}")
-
-        new_url = url.replace(".git", "")
-        logger.info(f"Creating LeanGitRepo for {new_url}")
-        repo = LeanGitRepo(new_url, latest_commit)
-        logger.info(f"Getting config for {url}")
-        config = repo.get_config("lean-toolchain")
-        v = generate_benchmark_lean4.get_lean4_version_from_config(config["content"])
-        if generate_benchmark_lean4.is_supported_version(v):
-            logger.info(f"Latest commit compatible for url {url}")
-            return latest_commit, v
-
-        logger.info(f"Searching for compatible commit for {url}")
-        try:
-            subprocess.run(
-                ["git", "rev-parse", "--is-inside-work-tree"],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            logger.info("Already in a Git repository")
-        except subprocess.CalledProcessError:
-            logger.info("Not in a Git repository. Initializing one.")
-            subprocess.run(["git", "init"], check=True)
-
-        process = subprocess.Popen(
-            ["git", "fetch", "--depth=1000000", url],  # Fetch commits
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        logger.info(f"Fetching commits for {url}")
-        _, stderr = process.communicate()
-        if process.returncode != 0:
-            raise Exception(f"Git fetch command failed: {stderr.decode('utf-8')}")
-        logger.info(f"Fetched commits for {url}")
-        process = subprocess.Popen(
-            ["git", "log", "--format=%H", "FETCH_HEAD"],  # Get list of commits
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        logger.info(f"Getting list of commits for {url}")
-        stdout, stderr = process.communicate()
-        if process.returncode != 0:
-            raise Exception(f"Git log command failed: {stderr.decode('utf-8')}")
-        commits = stdout.decode("utf-8").strip().split("\n")
-        logger.info(f"Found {len(commits)} commits for {url}")
-        for commit in commits:
-            new_url = url.replace(".git", "")
-            repo = LeanGitRepo(new_url, commit)
-            config = repo.get_config("lean-toolchain")
-            v = generate_benchmark_lean4.get_lean4_version_from_config(
-                config["content"]
-            )
-            if generate_benchmark_lean4.is_supported_version(v):
-                logger.info(f"Found compatible commit {commit} for {url}")
-                return commit, v
-
-        raise Exception("No compatible commit found")
-
-    except Exception as e:
-        logger.info(f"Error in get_compatible_commit: {str(e)}")
-        return None, None
-
-
-def find_and_save_compatible_commits(repo_info_file, lean_git_repos):
-    """Finds compatible commits for various repositories"""
-    updated_repos = []
-    for repo in lean_git_repos:
-        url = repo.url
-        if not url.endswith(".git"):
-            url = url + ".git"
-
-        sha = None
-        v = None
-        if "mathlib4" in url:
-            sha = "2b29e73438e240a427bcecc7c0fe19306beb1310"
-            v = "v4.8.0"
-        elif "SciLean" in url:
-            sha = "22d53b2f4e3db2a172e71da6eb9c916e62655744"
-            v = "v4.7.0"
-        elif "pfr" in url:
-            sha = "fa398a5b853c7e94e3294c45e50c6aee013a2687"
-            v = "v4.8.0-rc1"
-        else:
-            sha, v = get_compatible_commit(url)
-        if not sha:
-            logger.info(f"Failed to find a compatible commit for {url}")
-            continue
-
-        updated_repos.append(
-            {"url": url.replace(".git", ""), "commit": sha, "version": v}
-        )
-
-    with open(repo_info_file, "w") as f:
-        json.dump(updated_repos, f)
-
-    return updated_repos
-
-
-def search_github_repositories(language="Lean", num_repos=10):
-    """Search for the given number of repositories on GitHub that have the given language."""
-    headers = {"Authorization": personal_access_token}
-    query_params = {
-        "q": f"language:{language}",
-        "sort": "stars",
-        "order": "desc",
-        "per_page": 100,
-    }
-
-    cloned_count = 0
-    page = 1
-
-    while cloned_count < num_repos:
-        query_params["page"] = page
-        response = requests.get(
-            "https://api.github.com/search/repositories",
-            headers=headers,
-            params=query_params,
-        )
-
-        if response.status_code == 200:
-            repositories = response.json()["items"]
-            for repo in repositories:
-                if cloned_count >= num_repos:
-                    break
-                repo_full_name = repo["full_name"]
-                logger.info(f"Processing {repo_full_name}")
-                if repo_full_name not in known_repositories:
-                    name = None
-                    try:
-                        clone_url = repo["clone_url"]
-                        repo_name, sha = clone_repo(clone_url)
-                        name = repo_name
-                        url = clone_url.replace(".git", "")
-                        lean_git_repo = LeanGitRepo(url, sha)
-                        lean_git_repos.append(lean_git_repo)
-                        repos.append(repo_full_name)
-                        cloned_count += 1
-                        logger.info(f"Cloned {repo_full_name}")
-                    except Exception as e:
-                        shutil.rmtree(name)
-                        logger.info(f"Failed to clone {repo_full_name} because of {e}")
-                else:
-                    logger.info(
-                        f"Skipping {repo_full_name} since it is a known repository"
-                    )
-            page += 1
-        else:
-            logger.info("Failed to search GitHub", response.status_code)
-            break
-
-        # Check if we've reached the end of the search results
-        if len(repositories) < 100:
-            break
-
-    logger.info(f"Total repositories processed: {cloned_count}")
+repos = []
 
 
 def _eval(data, preds_map) -> Tuple[float, float, float]:
@@ -839,82 +333,7 @@ def prove_sorry_theorems(
 
     save_progress(all_encountered_theorems)
     logger.info("Finished attempting to prove sorry theorems")
-
-
-def add_repo_to_database(dynamic_database_json_path, repo, db):
-    """Adds a repository to the dynamic database."""
-    # Prepare the data necessary to add this repo to the dynamic database
-    url = repo.url
-    if not url.endswith(".git"):
-        url = url + ".git"
-    logger.info(f"Processing {url}")
-
-    if "mathlib4" in url:
-        sha = "2b29e73438e240a427bcecc7c0fe19306beb1310"
-        v = "v4.8.0"
-    elif "SciLean" in url:
-        sha = "22d53b2f4e3db2a172e71da6eb9c916e62655744"
-        v = "v4.7.0"
-    elif "pfr" in url:
-        sha = "fa398a5b853c7e94e3294c45e50c6aee013a2687"
-        v = "v4.8.0-rc1"
-    else:
-        sha, v = get_compatible_commit(url)
-
-    if not sha:
-        logger.info(f"Failed to find a compatible commit for {url}")
-        return None
-
-    logger.info(f"Found compatible commit {sha} for {url}")
-    logger.info(f"Lean version: {v}")
-    url = url.replace(".git", "")
-    repo = LeanGitRepo(url, sha)
-    dir_name = repo.url.split("/")[-1] + "_" + sha
-    dst_dir = RAID_DIR + "/" + DATA_DIR + "/" + dir_name
-    logger.info(f"Generating benchmark at {dst_dir}")
-    traced_repo, _, _, total_theorems = generate_benchmark_lean4.main(
-        repo.url, sha, dst_dir
-    )
-    if not traced_repo:
-        logger.info(f"Failed to trace {url}")
-        return None
-    if total_theorems < 3 * BATCH_SIZE:  # Should be enough theorems for train/val/test
-        logger.info(f"No theorems found in {url}")
-        return None
-    logger.info(f"Finished generating benchmark at {dst_dir}")
-
-    # Add the new repo to the dynamic database
-    config = repo.get_config("lean-toolchain")
-    v = generate_benchmark_lean4.get_lean4_version_from_config(config["content"])
-    theorems_folder = dst_dir + "/random"
-    premise_files_corpus = dst_dir + "/corpus.jsonl"
-    files_traced = dst_dir + "/traced_files.jsonl"
-    pr_url = None
-    data = {
-        "url": repo.url,
-        "name": "/".join(repo.url.split("/")[-2:]),
-        "commit": repo.commit,
-        "lean_version": v,
-        "lean_dojo_version": lean_dojo.__version__,
-        "metadata": {
-            "date_processed": datetime.datetime.now(),
-        },
-        "theorems_folder": theorems_folder,
-        "premise_files_corpus": premise_files_corpus,
-        "files_traced": files_traced,
-        "pr_url": pr_url,
-    }
-
-    repo = Repository.from_dict(data)
-    logger.info("Before adding new repo:")
-    db.print_database_contents()
-    db.add_repository(repo)
-    logger.info("After adding new repo:")
-    db.print_database_contents()
-    db.to_json(dynamic_database_json_path)
-    return "Done"
-
-
+    
 def replace_sorry_with_proof(proofs):
     """Replace the `sorry` with the proof text in the Lean files."""
     logger.info(f"Replacing sorries with {len(proofs)} proofs!")
@@ -945,128 +364,133 @@ def replace_sorry_with_proof(proofs):
 
     logger.info("Finished replacing sorries with proofs!")
 
+def initialize_database(dynamic_database_json_path: str) -> DynamicDatabase:
+    """Initializes or loads the dynamic database."""
+    # Check if the current process is the main one
+    is_main_process = int(os.environ.get("LOCAL_RANK", "0")) == 0
 
-def calculate_difficulty(theorem: Theorem) -> Union[float, None]:
-    """Calculates the difficulty of a theorem."""
-    proof_steps = theorem.traced_tactics
-    if any("sorry" in step.tactic for step in proof_steps):
-        return float("inf")  # Hard (no proof)
-    if len(proof_steps) == 0:
-        return None  # To be distributed later
-    return math.exp(len(proof_steps))
-
-
-def categorize_difficulty(
-    difficulty: Union[float, None], percentiles: List[float]
-) -> str:
-    """Categorizes the difficulty of a theorem."""
-    if difficulty is None:
-        return "To_Distribute"
-    if difficulty == float("inf"):
-        return "Hard (No proof)"
-    elif difficulty <= percentiles[0]:
-        return "Easy"
-    elif difficulty <= percentiles[1]:
-        return "Medium"
-    else:
-        return "Hard"
-
-
-def sort_repositories_by_difficulty(db: DynamicDatabase) -> List[Repository]:
-    """Sorts repositories by the difficulty of their theorems."""
-    difficulties_by_repo = defaultdict(list)
-    all_difficulties = []
-
-    print("Ready to calculate difficulties of all theorems")
-    for repo in db.repositories:
-        print(f"Starting {repo.name}")
-        for theorem in repo.get_all_theorems:
-            difficulty = calculate_difficulty(theorem)
-            theorem.difficulty_rating = difficulty
-            difficulties_by_repo[repo].append(
-                (
-                    theorem.full_name,
-                    str(theorem.file_path),
-                    tuple(theorem.start),
-                    tuple(theorem.end),
-                    difficulty,
+    # Initialize the database if it doesn't exist or is empty
+    if is_main_process:
+        logger.info("Starting the main process")
+        if (
+            not os.path.exists(dynamic_database_json_path)
+            or os.path.getsize(dynamic_database_json_path) == 0
+        ):
+            # File doesn't exist or is empty, initialize it
+            logger.info(
+                f"\nInitializing new database at {dynamic_database_json_path}\n"
+            )
+            db = DynamicDatabase()
+            db.to_json(dynamic_database_json_path)
+        else:
+            try:
+                logger.info(f"Loading database from {dynamic_database_json_path}")
+                db = DynamicDatabase.from_json(dynamic_database_json_path)
+                logger.info(f"Loaded database from {dynamic_database_json_path}")
+            except json.JSONDecodeError:
+                # If there's an error decoding the JSON, initialize a new database
+                logger.warning(
+                    f"Error decoding JSON from {dynamic_database_json_path}. Initializing new database."
                 )
+                db = DynamicDatabase()
+                db.to_json(dynamic_database_json_path)
+    
+    return db
+
+def get_repos(curriculum_learning: bool, num_repos: int, dynamic_database_json_path: str, db: DynamicDatabase):
+    global lean_git_repos
+    global repos
+    # If curriculum learning is enabled, initialize repositories and sort them by difficulty
+    repo_info_file = os.path.join(RAID_DIR, DATA_DIR, "repo_info_compatible.json")
+    # Check if the current process is the main one
+    is_main_process = int(os.environ.get("LOCAL_RANK", "0")) == 0
+    if curriculum_learning:
+        logger.info("Starting curriculum learning")
+        if is_main_process:
+            lean_git_repos, repos = search_github_repositories(lean_git_repos, repos, "Lean", num_repos)
+            
+            for i in range(len(lean_git_repos)):
+                repo = lean_git_repos[i]
+                print("\n\n")
+                logger.info(f"Processing new repo: {repo.url}")
+                result = add_repo_to_database(dynamic_database_json_path, repo, db)
+                if result is not None:
+                    logger.info(f"Successfully added repo {repo.url}")
+            
+            logger.info(
+                f"Successfully added {num_repos} repositories to the database"
             )
-            if difficulty is not None:
-                all_difficulties.append(difficulty)
 
-        db.update_repository(repo)
-        print(f"Finished {repo.name}")
-
-    percentiles = np.percentile(all_difficulties, [33, 67])
-
-    categorized_theorems = defaultdict(lambda: defaultdict(list))
-
-    print("Ready to categorize theorems")
-    for repo, theorems in difficulties_by_repo.items():
-        print(f"Starting {repo.name}")
-        for theorem_name, file_path, start, end, difficulty in theorems:
-            category = categorize_difficulty(difficulty, percentiles)
-            categorized_theorems[repo][category].append(
-                (theorem_name, file_path, start, end, difficulty)
+            sorted_repos, categorized_theorems, percentiles = (
+                sort_repositories_by_difficulty(db)
             )
-        print(f"Finished {repo.name}")
+            
+            print("Sorted repositories. Saving now...")
+            db.to_json(dynamic_database_json_path)
+            save_sorted_repos(sorted_repos, "sorted_repos.json")
+            
+            print("Summary of theorem difficulties by URL:")
+            for repo in sorted_repos:
+                print(f"\nURL: {repo.url}")
+                for category in ["Easy", "Medium", "Hard", "Hard (No proof)"]:
+                    theorems = categorized_theorems[repo][category]
+                    print(f"  {category}: {len(theorems)} theorems")
+                    if theorems:
+                        sorted_theorems = sorted(
+                            theorems,
+                            key=lambda x: (
+                                x[2] if x[2] is not None else -float("inf")
+                            ),
+                            reverse=True,
+                        )[:3]
+                        for name, path, _start, _end, diff in sorted_theorems:
+                            diff_str = f"{diff:.2f}" if diff is not None else "N/A"
+                            print(
+                                f"    - {name} (File: {path}, Difficulty: {diff_str})"
+                            )
 
-    print("Distributed theorems with no proofs")
-    for repo in categorized_theorems:
-        print(f"Starting {repo.name}")
-        to_distribute = categorized_theorems[repo]["To_Distribute"]
-        chunk_size = len(to_distribute) // 3
-        for i, category in enumerate(["Easy", "Medium", "Hard"]):
-            start = i * chunk_size
-            end = start + chunk_size if i < 2 else None
-            categorized_theorems[repo][category].extend(to_distribute[start:end])
-        del categorized_theorems[repo]["To_Distribute"]
-        print(f"Finished {repo.name}")
+            print("\nOverall Statistics:")
+            total_theorems = sum(
+                len(theorems)
+                for categories in categorized_theorems.values()
+                for theorems in categories.values()
+            )
+            for category in ["Easy", "Medium", "Hard", "Hard (No proof)"]:
+                count = sum(
+                    len(categories[category])
+                    for categories in categorized_theorems.values()
+                )
+                percentage = (count / total_theorems) * 100
+                print(f"{category}: {count} theorems ({percentage:.2f}%)")
 
-    # Sort repositories based on the number of easy theorems
-    sorted_repos = sorted(
-        categorized_theorems.keys(),
-        key=lambda r: len(categorized_theorems[r]["Easy"]),
-        reverse=True,
-    )
+            print(
+                f"\nPercentile thresholds: Easy <= {percentiles[0]:.2f}, Medium <= {percentiles[1]:.2f}, Hard > {percentiles[1]:.2f}"
+            )
 
-    return sorted_repos, categorized_theorems, percentiles
+            logger.info("Finding compatible repositories...")
+            updated_repos = find_and_save_compatible_commits(repo_info_file, sorted_repos)
+            lean_git_repos = [LeanGitRepo(repo["url"], repo["commit"]) for repo in updated_repos]
+            logger.info("Finished finding compatible repositories")
+    else:
+        logger.info("Starting without curriculum learning")
+        if is_main_process:
+            lean_git_repos, repos = search_github_repositories(lean_git_repos, repos, "lean", num_repos)
 
+            for i in range(len(lean_git_repos)):
+                repo = lean_git_repos[i]
+                logger.info(f"Processing {repo.url}")
+                result = add_repo_to_database(dynamic_database_json_path, repo, db)
+                if result is not None:
+                    logger.info(f"Successfully added repo {repo.url}")
+            
+            logger.info(f"Successfully added {num_repos} repositories to the database")
 
-def save_sorted_repos(sorted_repos: List[Repository], file_path: str):
-    """Saves the sorted repositories to a file."""
-    sorted_repo_data = [
-        {"url": repo.url, "commit": repo.commit, "name": repo.name}
-        for repo in sorted_repos
-    ]
-    with open(file_path, "w") as f:
-        json.dump(sorted_repo_data, f, indent=2)
-
-
-def load_sorted_repos(file_path: str) -> List[Tuple[str, str, str]]:
-    """Loads the sorted repositories from a file."""
-    with open(file_path, "r") as f:
-        sorted_repo_data = json.load(f)
-    return [(repo["url"], repo["commit"], repo["name"]) for repo in sorted_repo_data]
-
-
-def write_skip_file(repo_url):
-    """Writes a repository URL to a file to skip it."""
-    skip_file_path = os.path.join(RAID_DIR, DATA_DIR, "skip_repo.txt")
-    with open(skip_file_path, "w") as f:
-        f.write(repo_url)
-
-
-def should_skip_repo():
-    """Checks if a repository should be skipped."""
-    skip_file_path = os.path.join(RAID_DIR, DATA_DIR, "skip_repo.txt")
-    if os.path.exists(skip_file_path):
-        with open(skip_file_path, "r") as f:
-            repo_url = f.read().strip()
-        return True, repo_url
-    return False, None
-
+            logger.info("Finding compatible repositories...")
+            updated_repos = find_and_save_compatible_commits(repo_info_file, lean_git_repos)
+            lean_git_repos = [LeanGitRepo(repo["url"], repo["commit"]) for repo in updated_repos]
+            logger.info("Finished finding compatible repositories")
+    
+    return lean_git_repos, repos, updated_repos
 
 def main():
     """
@@ -1075,6 +499,7 @@ def main():
     global repos_for_merged_dataset
     global repos_for_proving
     global lean_git_repos
+    global repos
     try:
         current_epoch = 0
         epochs_per_repo = 1
@@ -1083,7 +508,7 @@ def main():
         single_repo = True
         curriculum_learning = True
         num_repos = 1
-        dynamic_database_json_path = RAID_DIR + "/" + DB_FILE_NAME
+        dynamic_database_json_path = os.path.join(RAID_DIR, DB_FILE_NAME)
 
         lambdas = None
         if run_progressive_training:
@@ -1098,131 +523,14 @@ def main():
         generate_benchmark_lean4.configure_leandojo()
         logger.info("LeanDojo configured")
 
-        # Check if the current process is the main one
-        is_main_process = int(os.environ.get("LOCAL_RANK", "0")) == 0
-
-        # Initialize the database if it doesn't exist or is empty
-        if is_main_process:
-            logger.info("Starting the main process")
-            if (
-                not os.path.exists(dynamic_database_json_path)
-                or os.path.getsize(dynamic_database_json_path) == 0
-            ):
-                # File doesn't exist or is empty, initialize it
-                logger.info(
-                    f"Initializing new database at {dynamic_database_json_path}"
-                )
-                db = DynamicDatabase()
-                db.to_json(dynamic_database_json_path)
-            else:
-                try:
-                    logger.info(f"Loading database from {dynamic_database_json_path}")
-                    db = DynamicDatabase.from_json(dynamic_database_json_path)
-                    logger.info(f"Loaded database from {dynamic_database_json_path}")
-                except json.JSONDecodeError:
-                    # If there's an error decoding the JSON, initialize a new database
-                    logger.warning(
-                        f"Error decoding JSON from {dynamic_database_json_path}. Initializing new database."
-                    )
-                    db = DynamicDatabase()
-                    db.to_json(dynamic_database_json_path)
-
+        db = initialize_database(dynamic_database_json_path)
         logger.info(f"Found {num_repos} repositories")
 
-        # If curriculum learning is enabled, initialize repositories and sort them by difficulty
-        if curriculum_learning:
-            logger.info("Starting curriculum learning")
-            repo_info_file = f"{RAID_DIR}/{DATA_DIR}/repo_info_compatible.json"
-            if is_main_process:
-                search_github_repositories("Lean", num_repos)
-                for i in range(len(lean_git_repos)):
-                    repo = lean_git_repos[i]
-                    logger.info(f"Processing {repo.url}")
-                    result = add_repo_to_database(dynamic_database_json_path, repo, db)
-                    if result is not None:
-                        logger.info(f"Successfully added repo {repo.url}")
-                logger.info(
-                    f"Successfully added {num_repos} repositories to the database"
-                )
+        lean_git_repos, repos, updated_repos = get_repos(curriculum_learning, num_repos, dynamic_database_json_path, db)
 
-                sorted_repos, categorized_theorems, percentiles = (
-                    sort_repositories_by_difficulty(db)
-                )
-                print("Sorted repositories. Saving now...")
-                db.to_json(dynamic_database_json_path)
-                save_sorted_repos(sorted_repos, "sorted_repos.json")
-                print("Summary of theorem difficulties by URL:")
-                for repo in sorted_repos:
-                    print(f"\nURL: {repo.url}")
-                    for category in ["Easy", "Medium", "Hard", "Hard (No proof)"]:
-                        theorems = categorized_theorems[repo][category]
-                        print(f"  {category}: {len(theorems)} theorems")
-                        if theorems:
-                            sorted_theorems = sorted(
-                                theorems,
-                                key=lambda x: (
-                                    x[2] if x[2] is not None else -float("inf")
-                                ),
-                                reverse=True,
-                            )[:3]
-                            for name, path, start, end, diff in sorted_theorems:
-                                diff_str = f"{diff:.2f}" if diff is not None else "N/A"
-                                print(
-                                    f"    - {name} (File: {path}, Difficulty: {diff_str})"
-                                )
-
-                print("\nOverall Statistics:")
-                total_theorems = sum(
-                    len(theorems)
-                    for categories in categorized_theorems.values()
-                    for theorems in categories.values()
-                )
-                for category in ["Easy", "Medium", "Hard", "Hard (No proof)"]:
-                    count = sum(
-                        len(categories[category])
-                        for categories in categorized_theorems.values()
-                    )
-                    percentage = (count / total_theorems) * 100
-                    print(f"{category}: {count} theorems ({percentage:.2f}%)")
-
-                print(
-                    f"\nPercentile thresholds: Easy <= {percentiles[0]:.2f}, Medium <= {percentiles[1]:.2f}, Hard > {percentiles[1]:.2f}"
-                )
-
-                logger.info("Finding compatible repositories...")
-                updated_repos = find_and_save_compatible_commits(
-                    repo_info_file, sorted_repos
-                )
-                lean_git_repos = [
-                    LeanGitRepo(repo["url"], repo["commit"]) for repo in updated_repos
-                ]
-                logger.info("Finished finding compatible repositories")
-        else:
-            logger.info("Starting without curriculum learning")
-            repo_info_file = f"{RAID_DIR}/{DATA_DIR}/repo_info_compatible.json"
-            if is_main_process:
-                search_github_repositories("Lean", num_repos)
-
-                for i in range(len(lean_git_repos)):
-                    repo = lean_git_repos[i]
-                    logger.info(f"Processing {repo.url}")
-                    result = add_repo_to_database(dynamic_database_json_path, repo, db)
-                    if result is not None:
-                        logger.info(f"Successfully added repo {repo.url}")
-                logger.info(
-                    f"Successfully added {num_repos} repositories to the database"
-                )
-
-                logger.info("Finding compatible repositories...")
-                updated_repos = find_and_save_compatible_commits(
-                    repo_info_file, lean_git_repos
-                )
-                lean_git_repos = [
-                    LeanGitRepo(repo["url"], repo["commit"]) for repo in updated_repos
-                ]
-                logger.info("Finished finding compatible repositories")
-
+        repo_info_file = os.path.join(RAID_DIR, DATA_DIR, "repo_info_compatible.json")
         # All processes wait for the file to be created and then read from it
+        # TODO: Fix with a semaphore or file lock
         max_attempts = 30
         for attempt in range(max_attempts):
             try:
@@ -1242,6 +550,8 @@ def main():
             for info in repo_info
         ]
 
+        is_main_process = int(os.environ.get("LOCAL_RANK", "0")) == 0
+        
         # Iterate over each repository and lambda value
         for i in range(num_repos):
             for lambda_value in lambdas:

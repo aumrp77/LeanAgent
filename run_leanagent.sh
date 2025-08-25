@@ -26,15 +26,17 @@
 #!/bin/bash
 export RAID_DIR="~/Desktop/LeanAgent/RAID/"
 export LEAN_AGENT_DIR="~/Desktop/LeanAgent"
-cd ${LEAN_AGENT_DIR}
-echo "Script executed from: ${PWD}"
-source /Users/motiwari/miniforge3/etc/profile.d/conda.sh
-conda activate LeanAgent
 export PYTHONPATH="${PYTHONPATH}:${RAID_DIR}/LeanAgent"
 export CACHE_DIR="${RAID_DIR}/.cache/lean_dojo"
+export RAY_TMPDIR="${RAID_DIR}/tmp"
+export CONDA_SH="/Users/motiwari/miniforge3/etc/profile.d/conda.sh"
+source ${CONDA_SH}
+
+cd ${LEAN_AGENT_DIR}
+echo "Script executed from: ${PWD}"
+conda activate LeanAgent
 echo "Removing old cache files"
 rm -rf /tmp/ray
-export RAY_TMPDIR="${RAID_DIR}/tmp"
 rm -rf ${RAY_TMPDIR}
 mkdir "${RAY_TMPDIR}"
 echo "Stopping ray"

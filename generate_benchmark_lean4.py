@@ -10,7 +10,7 @@ from copy import copy
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Union
-
+import os
 import lean_dojo
 import networkx as nx
 from lean_dojo import *

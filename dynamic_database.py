@@ -1,14 +1,14 @@
 from __future__ import annotations
-
-import datetime
+import time
+from datetime import datetime
 import json
 import os
 import random
 import shutil
 from collections import defaultdict
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Optional, Set, Tuple
 
 from lean_dojo.data_extraction.lean import Pos
 from loguru import logger
