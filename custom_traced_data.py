@@ -1,30 +1,26 @@
 """This module defines traced repos/files/theorems."""
 
-import re
-import os
-import json
-import random
 import itertools
+import json
+import os
+import random
+import re
 import webbrowser
-import networkx as nx
-from tqdm import tqdm
-from lxml import etree
-from pathlib import Path
-from loguru import logger
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any, Tuple, Union
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-from ..utils import (
-    is_git_repo,
-    compute_md5,
-    to_lean_path,
-    to_dep_path,
-    to_json_path,
-    to_xml_path,
-)
+import networkx as nx
+from loguru import logger
+from lxml import etree
+from tqdm import tqdm
+
+from ..constants import (LEAN4_PACKAGES_DIR, LOAD_USED_PACKAGES_ONLY,
+                         NUM_WORKERS)
+from ..utils import (compute_md5, is_git_repo, to_dep_path, to_json_path,
+                     to_lean_path, to_xml_path)
 from .ast import *
-from .lean import LeanFile, LeanGitRepo, Theorem, Pos
-from ..constants import NUM_WORKERS, LOAD_USED_PACKAGES_ONLY, LEAN4_PACKAGES_DIR
+from .lean import LeanFile, LeanGitRepo, Pos, Theorem
 
 
 @dataclass(frozen=True)

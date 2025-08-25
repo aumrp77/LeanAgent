@@ -1,36 +1,27 @@
 """Proof search using best-first search."""
 
+import asyncio
+import heapq
 import os
 import sys
-import ray
 import time
 import uuid
-import heapq
-import asyncio
-import torch
-from lean_dojo import (
-    Pos,
-    Dojo,
-    Theorem,
-    LeanGitRepo,
-    TacticState,
-    LeanError,
-    TimeoutError,
-    ProofFinished,
-    ProofGivenUp,
-    DojoInitError,
-    DojoCrashError,
-    DojoHardTimeoutError,
-)
-from loguru import logger
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
+
+import ray
+import torch
+from lean_dojo import (Dojo, DojoCrashError, DojoHardTimeoutError,
+                       DojoInitError, LeanError, LeanGitRepo, Pos,
+                       ProofFinished, ProofGivenUp, TacticState, Theorem,
+                       TimeoutError)
+from loguru import logger
 from ray.util.actor_pool import ActorPool
-from vllm import AsyncLLMEngine, AsyncEngineArgs, SamplingParams, RequestOutput
+from vllm import AsyncEngineArgs, AsyncLLMEngine, RequestOutput, SamplingParams
 
 from common import zip_strict
+from generator.model import FixedTacticGenerator, RetrievalAugmentedGenerator
 from prover.search_tree import *
-from generator.model import RetrievalAugmentedGenerator, FixedTacticGenerator
 
 tolerance = 1  # second
 RAID_DIR = os.environ.get("RAID_DIR")

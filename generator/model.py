@@ -1,28 +1,22 @@
 """Lightning module for the tactic generator."""
 
 import os
-import torch
-import shutil
-import openai
 import pickle
+import shutil
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Optional, Tuple
+
+import openai
+import pytorch_lightning as pl
+import torch
 from lean_dojo import Pos
 from loguru import logger
-import pytorch_lightning as pl
 from torchmetrics import Metric
-from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, Tuple
-from transformers import T5ForConditionalGeneration, AutoTokenizer
+from transformers import AutoTokenizer, T5ForConditionalGeneration
 
-from common import (
-    zip_strict,
-    remove_marks,
-    IndexedCorpus,
-    get_optimizers,
-    load_checkpoint,
-    format_augmented_state,
-)
+from common import (IndexedCorpus, format_augmented_state, get_optimizers,
+                    load_checkpoint, remove_marks, zip_strict)
 from retrieval.model import PremiseRetriever
-
 
 torch.set_float32_matmul_precision("medium")
 

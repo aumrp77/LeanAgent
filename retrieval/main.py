@@ -1,17 +1,18 @@
 """Script for training the premise retriever."""
 
-import os
-from typing import Tuple
-import numpy as np
-import pickle
 import json
-from tqdm import tqdm
+import os
+import pickle
+import sys
+from typing import Tuple
+
+import numpy as np
 from loguru import logger
 from pytorch_lightning.cli import LightningCLI, SaveConfigCallback
-import sys
+from tqdm import tqdm
 
-from retrieval.model import PremiseRetriever
 from retrieval.datamodule import RetrievalDataModule
+from retrieval.model import PremiseRetriever
 
 
 class CLI(LightningCLI):

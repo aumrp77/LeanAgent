@@ -1,31 +1,24 @@
 """Ligihtning module for the premise retriever."""
 
-import os
 import json
 import math
-import torch
+import os
 import pickle
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Tuple, Union
+
 import numpy as np
-from tqdm import tqdm
+import pytorch_lightning as pl
+import torch
+import torch.nn.functional as F
 from lean_dojo import Pos
 from loguru import logger
-import pytorch_lightning as pl
-import torch.nn.functional as F
-from typing import List, Dict, Any, Tuple, Union
-from transformers import T5EncoderModel, AutoTokenizer
 from torch.distributed import barrier
-from datetime import datetime, timedelta
+from tqdm import tqdm
+from transformers import AutoTokenizer, T5EncoderModel
 
-from common import (
-    Premise,
-    Context,
-    Corpus,
-    get_optimizers,
-    load_checkpoint,
-    zip_strict,
-    cpu_checkpointing_enabled,
-)
-
+from common import (Context, Corpus, Premise, cpu_checkpointing_enabled,
+                    get_optimizers, load_checkpoint, zip_strict)
 
 torch.set_float32_matmul_precision("medium")
 

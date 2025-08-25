@@ -1,16 +1,18 @@
 from __future__ import annotations
+
 import datetime
 import json
 import os
-from dataclasses import dataclass, field, asdict
-from typing import List, Dict, Optional, Union, Tuple, Set
-from pathlib import Path
-from lean_dojo.data_extraction.lean import Pos
-from tqdm import tqdm
 import random
-from collections import defaultdict
-from loguru import logger
 import shutil
+from collections import defaultdict
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Dict, List, Optional, Set, Tuple, Union
+
+from lean_dojo.data_extraction.lean import Pos
+from loguru import logger
+from tqdm import tqdm
 
 
 def parse_pos(pos_str):

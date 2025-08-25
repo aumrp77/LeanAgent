@@ -1,32 +1,24 @@
 # import all the necessary modules
-import math
-from typing import Union
-import unittest
 import datetime
-from pathlib import Path
-from dynamic_database import (
-    DynamicDatabase,
-    Repository,
-    Theorem,
-    AnnotatedTactic,
-    Annotation,
-    PremiseFile,
-    Premise,
-)
-from lean_dojo.data_extraction.lean import Pos, LeanGitRepo
-import generate_benchmark_lean4
-import lean_dojo
 import json
-import shutil
-import random
-from loguru import logger
-from unittest.mock import Mock, patch
-from dynamic_database import DynamicDatabase, Repository, Theorem, AnnotatedTactic
-from prover.proof_search import Status, SearchResult
-from dynamic_database import parse_pos
-from typing import Tuple
+import math
 import os
-from unittest.mock import patch, MagicMock
+import random
+import shutil
+import unittest
+from pathlib import Path
+from typing import Tuple, Union
+from unittest.mock import MagicMock, Mock, patch
+
+import lean_dojo
+from lean_dojo.data_extraction.lean import LeanGitRepo, Pos
+from loguru import logger
+
+import generate_benchmark_lean4
+from dynamic_database import (AnnotatedTactic, Annotation, DynamicDatabase,
+                              Premise, PremiseFile, Repository, Theorem,
+                              parse_pos)
+from prover.proof_search import SearchResult, Status
 
 RAID_DIR = os.environ.get("RAID_DIR")
 DATA_DIR = "datasets_new_unittest"

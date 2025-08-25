@@ -1,20 +1,22 @@
 """Utility functions used internally by LeanDojo."""
 
-import re
-import os
-import time
-import urllib
-import typing
 import hashlib
-import tempfile
+import os
+import re
 import subprocess
-from pathlib import Path
-from loguru import logger
-from functools import cache
+import tempfile
+import time
+import typing
+import urllib
 from contextlib import contextmanager
-from typing import Tuple, Union, List, Generator, Optional
+from functools import cache
+from pathlib import Path
+from typing import Generator, List, Optional, Tuple, Union
 
-from .constants import NUM_WORKERS, TMP_DIR, LEAN4_PACKAGES_DIR, LEAN4_BUILD_DIR
+from loguru import logger
+
+from .constants import (LEAN4_BUILD_DIR, LEAN4_PACKAGES_DIR, NUM_WORKERS,
+                        TMP_DIR)
 
 
 @contextmanager

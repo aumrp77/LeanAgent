@@ -1,20 +1,21 @@
 import json
-import shutil
 import random
-import networkx as nx
-from copy import copy
-from pathlib import Path
-from loguru import logger
-from datetime import datetime
-from collections import defaultdict
-from typing import Dict, List, Union
-import time
-import lean_dojo
-from lean_dojo import *
-from lean_dojo.constants import LEAN4_PACKAGES_DIR
 import re
+import shutil
 import subprocess
 import sys
+import time
+from collections import defaultdict
+from copy import copy
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Union
+
+import lean_dojo
+import networkx as nx
+from lean_dojo import *
+from lean_dojo.constants import LEAN4_PACKAGES_DIR
+from loguru import logger
 
 random.seed(3407)  # https://arxiv.org/abs/2109.08203
 

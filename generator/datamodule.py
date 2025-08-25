@@ -1,24 +1,18 @@
 """Data module for the tactic generator."""
 
-import os
 import json
+import os
 import pickle
-from tqdm import tqdm
-from loguru import logger
+from typing import Any, Dict, List, Optional
+
 import pytorch_lightning as pl
-from typing import Optional, List, Dict, Any
+from loguru import logger
 from torch.utils.data import DataLoader, Dataset
+from tqdm import tqdm
 from transformers import AutoTokenizer, ByT5Tokenizer
 
-from common import (
-    Batch,
-    Corpus,
-    Example,
-    format_state,
-    remove_marks,
-    format_tactic,
-    format_augmented_state,
-)
+from common import (Batch, Corpus, Example, format_augmented_state,
+                    format_state, format_tactic, remove_marks)
 
 
 class GeneratorDataset(Dataset):

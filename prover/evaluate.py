@@ -1,18 +1,18 @@
 """Script for evaluating the prover on theorems extracted by LeanDojo."""
 
-import os
-import uuid
-import json
-import pickle
-import hashlib
 import argparse
+import hashlib
+import json
+import os
+import pickle
+import uuid
+from typing import List, Optional, Tuple
+
+from lean_dojo import LeanGitRepo, Pos, Theorem, is_available_in_cache
 from loguru import logger
-from lean_dojo import Theorem
-from typing import List, Tuple, Optional
-from lean_dojo import LeanGitRepo, Theorem, Pos, is_available_in_cache
 
 from common import set_logger
-from prover.proof_search import Status, DistributedProver
+from prover.proof_search import DistributedProver, Status
 
 
 def _get_theorems(

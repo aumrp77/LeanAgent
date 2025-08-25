@@ -1,54 +1,45 @@
 # import all the necessary libraries
+import json
 import math
-import ray
-from collections import defaultdict
 import os
-import requests
-import subprocess
-import re
-import shutil
-from lean_dojo import *
-import os
-import json
 import pickle
-import numpy as np
-from tqdm import tqdm
-from loguru import logger
-from lean_dojo import Theorem
-from typing import List, Tuple, Optional
-from lean_dojo import LeanGitRepo, Pos, is_available_in_cache
-from lean_dojo import Theorem as LeanDojoTheorem
-import json
-import shutil
 import random
-from copy import copy
-from pathlib import Path
-from loguru import logger
-from datetime import datetime, timedelta
-from collections import defaultdict
-from typing import Dict, List, Union
-import generate_benchmark_lean4
-import traceback
-import sys
-from tqdm import tqdm
-from dynamic_database import *
-import time
-from pytorch_lightning.strategies import DDPStrategy
-from prover.proof_search import Status, DistributedProver, SearchResult
 import re
+import shutil
+import subprocess
+import sys
+import time
+import traceback
+from collections import defaultdict
+from copy import copy
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Union
+
 import lean_dojo
+import numpy as np
 import pytorch_lightning as pl
-from retrieval.model import PremiseRetriever
+import ray
+import requests
+import torch
+from lean_dojo import *
+from lean_dojo import LeanGitRepo, Pos
+from lean_dojo import Theorem
+from lean_dojo import Theorem as LeanDojoTheorem
+from lean_dojo import is_available_in_cache
+from loguru import logger
+from pytorch_lightning import seed_everything
+from pytorch_lightning.callbacks import (Callback, EarlyStopping,
+                                         LearningRateMonitor, ModelCheckpoint)
+from pytorch_lightning.strategies import DDPStrategy
+from tqdm import tqdm
+
+import generate_benchmark_lean4
+from dynamic_database import *
+from prover.proof_search import DistributedProver, SearchResult, Status
 from retrieval.datamodule import RetrievalDataModule
 from retrieval.main import run_cli
-import torch
-from pytorch_lightning.callbacks import (
-    ModelCheckpoint,
-    EarlyStopping,
-    LearningRateMonitor,
-    Callback,
-)
-from pytorch_lightning import seed_everything
+from retrieval.model import PremiseRetriever
 
 # Set the seed for reproducibility
 random.seed(3407)  # https://arxiv.org/abs/2109.08203
