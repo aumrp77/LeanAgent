@@ -25,7 +25,7 @@ class GeneratorDataset(Dataset):
     """
     A PyTorch Dataset for loading and processing data for a generator model that produces tactics given proof states.
 
-    This dataset handles loading examples from a JSON file, formatting states and tactics, 
+    This dataset handles loading examples from a JSON file, formatting states and tactics,
     and optionally augmenting states with retrieved premises.
 
     Attributes:
@@ -39,6 +39,7 @@ class GeneratorDataset(Dataset):
         is_train (bool): Whether this dataset is used for training.
         data (List[Example]): The loaded and processed examples.
     """
+
     def __init__(
         self,
         data_path: str,

@@ -53,6 +53,7 @@ class RetrievalDataset(Dataset):
             'label': tensor,
             # Additional metadata fields
     """
+
     def __init__(
         self,
         data_paths: List[str],
@@ -76,14 +77,18 @@ class RetrievalDataset(Dataset):
 
     def load_or_cache_data(self, data_paths: List[str]) -> List[Example]:
         cache_file = os.path.join(self.cache_path, "cached_data.pkl")
-        
+
         # Check if cached data exists
         if os.path.exists(cache_file):
-            with open(cache_file, 'rb') as file:
+            with open(cache_file, "rb") as file:
                 data = pickle.load(file)
             logger.info(f"Loaded data from cache {cache_file}")
         else:
-            data = list(itertools.chain.from_iterable(self._load_data(path) for path in data_paths))
+            data = list(
+                itertools.chain.from_iterable(
+                    self._load_data(path) for path in data_paths
+                )
+            )
             # Cache the data
             # create file if it does not already exist
             try:
@@ -92,7 +97,7 @@ class RetrievalDataset(Dataset):
                 if exc.errno != errno.EEXIST:
                     raise
                 pass
-            with open(cache_file, 'wb') as file:
+            with open(cache_file, "wb") as file:
                 pickle.dump(data, file)
             logger.info(f"Saved loaded data to cache {cache_file}")
         return data
@@ -107,7 +112,10 @@ class RetrievalDataset(Dataset):
                 state = format_state(tac["state_before"])
                 # Some states are empty because they are from sorry theorems that have been proven.
                 context = Context(
-                    file_path, thm["full_name"], Pos(*thm["start"]), state if state else None
+                    file_path,
+                    thm["full_name"],
+                    Pos(*thm["start"]),
+                    state if state else None,
                 )
                 all_pos_premises = get_all_pos_premises(
                     tac["annotated_tactic"], self.corpus
@@ -295,6 +303,7 @@ class RetrievalDataModule(pl.LightningDataModule):
     ds_pred : RetrievalDataset
         Test dataset for prediction
     """
+
     def __init__(
         self,
         data_path: str,
@@ -332,7 +341,7 @@ class RetrievalDataModule(pl.LightningDataModule):
             self.max_seq_len,
             self.tokenizer,
             is_train=True,
-            cache_path=os.path.join(self.data_path, "cache_train")
+            cache_path=os.path.join(self.data_path, "cache_train"),
         )
         print(f"Training dataset size: {len(self.ds_train)}")
 
@@ -345,7 +354,7 @@ class RetrievalDataModule(pl.LightningDataModule):
                 self.max_seq_len,
                 self.tokenizer,
                 is_train=False,
-                cache_path=os.path.join(self.data_path, "cache_val")
+                cache_path=os.path.join(self.data_path, "cache_val"),
             )
             print(f"Validation dataset size: {len(self.ds_val)}")
 
@@ -358,7 +367,7 @@ class RetrievalDataModule(pl.LightningDataModule):
                 self.max_seq_len,
                 self.tokenizer,
                 is_train=False,
-                cache_path=os.path.join(self.data_path, "cache_pred")
+                cache_path=os.path.join(self.data_path, "cache_pred"),
             )
             print(f"Testing dataset size: {len(self.ds_pred)}")
 

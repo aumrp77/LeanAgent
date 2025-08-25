@@ -1,5 +1,4 @@
-"""Script for indexing the corpus using the retriever.
-"""
+"""Script for indexing the corpus using the retriever."""
 
 import torch
 import pickle

@@ -1,5 +1,4 @@
-"""Script for evaluating the prover on theorems extracted by LeanDojo.
-"""
+"""Script for evaluating the prover on theorems extracted by LeanDojo."""
 
 import os
 import uuid
@@ -27,7 +26,7 @@ def _get_theorems(
     """
     Retrieves a list of Lean theorems from specified files based on given filters.
 
-    This function fetches theorems from Lean files using internal helper functions and 
+    This function fetches theorems from Lean files using internal helper functions and
     validates that all repositories containing the theorems have been traced with LeanDojo.
 
     Parameters:
@@ -194,7 +193,7 @@ def evaluate(
         num_sampled_tactics=num_sampled_tactics,
         debug=verbose,
     )
-    
+
     results = prover.search_unordered(repo, theorems, positions)
 
     # Calculate the result statistics.

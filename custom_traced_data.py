@@ -1,5 +1,4 @@
-"""This module defines traced repos/files/theorems.
-"""
+"""This module defines traced repos/files/theorems."""
 
 import re
 import os
@@ -1080,7 +1079,7 @@ class TracedRepo:
             TracedFile.from_traced_file(root_dir, path, repo)
             for path in tqdm(json_paths)
         ]
-        
+
         dependencies = repo.get_dependencies(root_dir)
         if build_deps:
             traced_files_graph = _build_dependency_graph(traced_files, root_dir, repo)
@@ -1110,7 +1109,7 @@ class TracedRepo:
 
         for tf in tqdm(self.traced_files, total=num_traced_files):
             _save_xml_to_disk(tf)
-    
+
     @classmethod
     def load_from_disk(
         cls, root_dir: Union[str, Path], build_deps: bool = True
@@ -1138,7 +1137,7 @@ class TracedRepo:
         traced_files = [
             TracedFile.from_xml(root_dir, path, repo) for path in tqdm(xml_paths)
         ]
-        
+
         dependencies = repo.get_dependencies(root_dir)
         if build_deps:
             traced_files_graph = _build_dependency_graph(traced_files, root_dir, repo)

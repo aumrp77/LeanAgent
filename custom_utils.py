@@ -1,5 +1,4 @@
-"""Utility functions used internally by LeanDojo.
-"""
+"""Utility functions used internally by LeanDojo."""
 
 import re
 import os
@@ -20,7 +19,7 @@ from .constants import NUM_WORKERS, TMP_DIR, LEAN4_PACKAGES_DIR, LEAN4_BUILD_DIR
 
 @contextmanager
 def working_directory(
-    path: Optional[Union[str, Path]] = None
+    path: Optional[Union[str, Path]] = None,
 ) -> Generator[Path, None, None]:
     """Context manager setting the current working directory (CWD) to ``path`` (or a temporary directory if ``path`` is None).
 
@@ -51,6 +50,7 @@ def working_directory(
         os.chdir(origin)
         if is_temporary:
             tmp_dir.__exit__(None, None, None)
+
 
 @contextmanager
 def report_critical_failure(msg: str) -> Generator[None, None, None]:

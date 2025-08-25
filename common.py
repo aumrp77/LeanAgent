@@ -38,10 +38,12 @@ class Context:
         assert isinstance(self.theorem_full_name, str)
         assert isinstance(self.theorem_pos, Pos)
         if self.state is not None:
-            if not (isinstance(self.state, str)
+            if not (
+                isinstance(self.state, str)
                 and "⊢" in self.state
                 and MARK_START_SYMBOL not in self.state
-                and MARK_END_SYMBOL not in self.state):
+                and MARK_END_SYMBOL not in self.state
+            ):
                 logger.warning(f"Invalid state: {self.state}")
             assert (
                 isinstance(self.state, str)
@@ -56,8 +58,10 @@ class Context:
             return ""
         return self.state
 
+
 def escape_regex_special_chars(text):
     return re.escape(text)
+
 
 @dataclass(unsafe_hash=True)
 class Premise:
@@ -202,7 +206,6 @@ class Corpus:
         dep_graph = nx.DiGraph()
         self.all_premises = []
 
-
         for line in open(jsonl_path):
             file_data = json.loads(line)
             path = file_data["path"]
@@ -222,7 +225,7 @@ class Corpus:
         self.imported_premises_cache = {}
         self.fill_cache()
 
-    def _get_file(self, path: str) -> File:        
+    def _get_file(self, path: str) -> File:
         # for some reason, the `path` in the parameter starts with ./
         # but the paths in the corpus don't
         # so we need to remove the ./
@@ -471,7 +474,9 @@ def _is_deepspeed_checkpoint(path: str):
 def load_checkpoint(model_cls, ckpt_path: str, device, freeze: bool, config: dict):
     """Handle DeepSpeed checkpoints in model loading."""
     if not _is_deepspeed_checkpoint(ckpt_path):
-        model = model_cls.load_from_checkpoint(ckpt_path, strict=False, **config).to(device)
+        model = model_cls.load_from_checkpoint(ckpt_path, strict=False, **config).to(
+            device
+        )
     else:
         with tempfile.TemporaryDirectory() as dirname:
             path = os.path.join(dirname, "lightning.cpkt")

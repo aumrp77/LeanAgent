@@ -29,6 +29,7 @@ from common import (
 
 torch.set_float32_matmul_precision("medium")
 
+
 class PremiseRetriever(pl.LightningModule):
     """
     A PyTorch Lightning module implementing a premise retriever for theorem proving.
@@ -58,6 +59,7 @@ class PremiseRetriever(pl.LightningModule):
         max_seq_len (int): Maximum sequence length for tokenization
         num_retrieved (int, optional): Number of premises to retrieve. Defaults to 100.
     """
+
     def __init__(
         self,
         model_name: str,
@@ -91,22 +93,24 @@ class PremiseRetriever(pl.LightningModule):
         self.lamda = lambda_value
 
     def set_previous_params(self):
-        self.previous_params = {name: param.clone().detach() for name, param in self.named_parameters()}
+        self.previous_params = {
+            name: param.clone().detach() for name, param in self.named_parameters()
+        }
 
     def ewc_loss(self):
         """
         Calculate the Elastic Weight Consolidation (EWC) loss.
-        EWC loss is used to prevent catastrophic forgetting in neural networks by 
-        penalizing changes to important parameters. The penalty is based on the 
-        Fisher Information matrix and the difference between current and previous 
+        EWC loss is used to prevent catastrophic forgetting in neural networks by
+        penalizing changes to important parameters. The penalty is based on the
+        Fisher Information matrix and the difference between current and previous
         parameter values.
         Returns:
-            float: The calculated EWC loss. If Fisher information is not available 
+            float: The calculated EWC loss. If Fisher information is not available
                    or lambda is zero, returns 0.0.
         """
         if not self.fisher_info or self.lamda == 0:
             return 0.0
-    
+
         ewc_loss = 0
         for name, param in self.named_parameters():
             if name in self.fisher_info and name in self.previous_params:
@@ -121,7 +125,9 @@ class PremiseRetriever(pl.LightningModule):
         return total_loss
 
     @classmethod
-    def load(cls, ckpt_path: str, device, freeze: bool, config: dict) -> "PremiseRetriever":
+    def load(
+        cls, ckpt_path: str, device, freeze: bool, config: dict
+    ) -> "PremiseRetriever":
         return load_checkpoint(cls, ckpt_path, device, freeze, config)
 
     @classmethod
@@ -158,7 +164,9 @@ class PremiseRetriever(pl.LightningModule):
             self.corpus = indexed_corpus.corpus
             self.corpus_embeddings = indexed_corpus.embeddings
             self.embeddings_staled = False
-            logger.info(f"Embeddings staled load corpus pickle: {self.embeddings_staled}")
+            logger.info(
+                f"Embeddings staled load corpus pickle: {self.embeddings_staled}"
+            )
 
     @property
     def embedding_size(self) -> int:
@@ -250,7 +258,6 @@ class PremiseRetriever(pl.LightningModule):
         """Mark the embeddings as staled after a training batch."""
         self.embeddings_staled = True
 
-
     def configure_optimizers(self) -> Dict[str, Any]:
         return get_optimizers(
             self.parameters(), self.trainer, self.lr, self.warmup_steps
@@ -274,7 +281,7 @@ class PremiseRetriever(pl.LightningModule):
 
         Returns:
             None
-        """        
+        """
         if not self.embeddings_staled:
             return
         logger.info("Re-indexing the retrieval corpus")
@@ -450,12 +457,12 @@ class PremiseRetriever(pl.LightningModule):
                     "scores": s,
                 }
             )
-    
+
     def on_predict_epoch_end(self) -> None:
         if self.trainer.log_dir is not None:
             logger.info("About to construct predictions map")
             gpu_id = self.trainer.local_rank
-            
+
             preds_map = {
                 (p["file_path"], p["full_name"], tuple(p["start"]), p["tactic_idx"]): p
                 for p in self.predict_step_outputs

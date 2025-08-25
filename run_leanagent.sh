@@ -24,13 +24,13 @@
 #
 # Usage: bash run_leanagent.sh
 #!/bin/bash
-export RAID_DIR="<RAID_DIR>"
-cd ${RAID_DIR}/LeanAgent
+export RAID_DIR="~/Desktop/LeanAgent/RAID/"
+export LEAN_AGENT_DIR="~/Desktop/LeanAgent"
+cd ${LEAN_AGENT_DIR}
 echo "Script executed from: ${PWD}"
-source <PATH_TO_CONDA_ENV>/etc/profile.d/conda.sh
+source /Users/motiwari/miniforge3/etc/profile.d/conda.sh
 conda activate LeanAgent
 export PYTHONPATH="${PYTHONPATH}:${RAID_DIR}/LeanAgent"
-export GITHUB_ACCESS_TOKEN="<GITHUB_ACCESS_TOKEN>"
 export CACHE_DIR="${RAID_DIR}/.cache/lean_dojo"
 echo "Removing old cache files"
 rm -rf /tmp/ray

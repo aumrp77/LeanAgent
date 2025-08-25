@@ -17,4 +17,4 @@ def test_remove_marks(input_string, expected_output):
     """
     Tests that remove_marks correctly strips <a> and </a> tags from a string.
     """
-    assert remove_marks(input_string) == expected_output 
+    assert remove_marks(input_string) == expected_output

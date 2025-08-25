@@ -1,5 +1,8 @@
 *.pkl
 retrieval/bm25
+.idea/
+.DS_Store
+RAID/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
