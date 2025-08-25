@@ -16,7 +16,7 @@ from typing import Union, List, Tuple
 import math
 import os
 
-from constants import known_repositories, known_dead_repos, PR_TITLE, PR_BODY, TMP_BRANCH, COMMIT_MESSAGE
+from constants import known_repositories, PR_TITLE, PR_BODY, TMP_BRANCH, COMMIT_MESSAGE
 
 personal_access_token = os.environ.get("GITHUB_ACCESS_TOKEN")
 BATCH_SIZE = 4
@@ -141,22 +141,10 @@ def create_pull_request(repo_full_name, title, body, head_branch):
         print("Failed to create pull request", response.text)
         return ""
 
-def ensure_inside_git():
-    """Ensure that the current directory is inside a git repository."""
-    try:
-        subprocess.run(
-            ["git", "rev-parse", "--is-inside-work-tree"],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        logger.info("Already in a Git repository")
-    except subprocess.CalledProcessError:
-        logger.info("Not in a Git repository. Initializing one.")
-        subprocess.run(["git", "init"], check=True)
-        
+
 def get_compatible_commit(url):
     """Find the most recent commit with a Lean version that LeanAgent supports."""
+    import ipdb; ipdb.set_trace()
     try:
         process = subprocess.Popen(["git", "ls-remote", url], stdout=subprocess.PIPE)
         stdout, stderr = process.communicate()
@@ -177,9 +165,18 @@ def get_compatible_commit(url):
             return latest_commit, v
 
         logger.info(f"Searching for compatible commit for {url}")
-        
-        ensure_inside_git()
-        ZZ
+        try:
+            subprocess.run(
+                ["git", "rev-parse", "--is-inside-work-tree"],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            logger.info("Already in a Git repository")
+        except subprocess.CalledProcessError:
+            logger.info("Not in a Git repository. Initializing one.")
+            subprocess.run(["git", "init"], check=True)
+
         process = subprocess.Popen(
             ["git", "fetch", "--depth=1000000", url],  # Fetch commits
             stdout=subprocess.PIPE,
@@ -209,21 +206,10 @@ def get_compatible_commit(url):
         logger.info(f"Found {len(commits)} commits for {url}")
         
         new_url = url.replace(".git", "")
-        
-        repo_human_name = "/".join(new_url.split("/")[-2:])
-        
-        # Delete repo if it exists, because it might be checked out to a different commit
-        if os.path.exists(os.path.join("repos", repo_human_name)):
-            shutil.rmtree(os.path.join("repos", repo_human_name))
-        
-        subprocess.run(["git", "clone", url, os.path.join("repos", repo_human_name)], check=True)
-
         for commit in commits:
-            logger.info(f"Checking commit {commit} for {url}")
-            # Check out the commit locally
-            subprocess.run(["git", "-C", os.path.join("repos", repo_human_name), "checkout", commit], check=True)
-            import ipdb; ipdb.set_trace()
-            repo = LeanGitRepo.from_path(os.path.join(os.getcwd(), "repos", repo_human_name), commit)
+            
+            
+            repo = LeanGitRepo(new_url, commit)
             config = repo.get_config("lean-toolchain")
             v = generate_benchmark_lean4.get_lean4_version_from_config(config["content"])
             if generate_benchmark_lean4.is_supported_version(v):
@@ -239,6 +225,7 @@ def get_compatible_commit(url):
 
 def find_and_save_compatible_commits(repo_info_file, lean_git_repos):
     """Finds compatible commits for various repositories"""
+    import ipdb; ipdb.set_trace()
     with open(repo_info_file, "r") as repo_compatibility_file:
         updated_repos = json.loads(repo_compatibility_file)
     
@@ -317,7 +304,7 @@ def search_github_repositories(lean_git_repos, repos, language="Lean", num_repos
                 
                 
                 # Skip repos that are already known
-                if repo_full_name not in known_repositories + known_dead_repos + repos:
+                if repo_full_name not in known_repositories:
                     print("\n\n")
                     logger.info(f"Processing new repo: {repo_full_name}")
                     name = None
@@ -326,10 +313,7 @@ def search_github_repositories(lean_git_repos, repos, language="Lean", num_repos
                         repo_name, sha = clone_repo(clone_url)
                         name = repo_name
                         url = clone_url.replace(".git", "")
-                        
-                        # TODO: This constructor can be very slow
                         lean_git_repo = LeanGitRepo(url, sha)
-                        
                         lean_git_repos.append(lean_git_repo)
                         repos.append(repo_full_name)
                         cloned_count += 1
