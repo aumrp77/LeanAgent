@@ -24,10 +24,11 @@
 #
 # Usage: bash run_leanagent.sh
 #!/bin/bash
-export RAID_DIR="~/Desktop/LeanAgent/RAID/"
-export LEAN_AGENT_DIR="~/Desktop/LeanAgent"
+export RAID_DIR="/Users/motiwari/Desktop/LeanAgent/RAID"
+export LEAN_AGENT_DIR="/Users/motiwari/Desktop/LeanAgent"
 export PYTHONPATH="${PYTHONPATH}:${RAID_DIR}/LeanAgent"
 export CACHE_DIR="${RAID_DIR}/.cache/lean_dojo"
+export REPO_DIR ="${RAID_DIR}/repos"
 export RAY_TMPDIR="${RAID_DIR}/tmp"
 export CONDA_SH="/Users/motiwari/miniforge3/etc/profile.d/conda.sh"
 source ${CONDA_SH}

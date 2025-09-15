@@ -574,9 +574,7 @@ def main():
 
                     db.generate_merged_dataset(dst_dir, repos_for_merged_dataset)
 
-                dst_dir = (
-                    RAID_DIR + "/" + DATA_DIR + "/" + f"merged_with_new_{dir_name}"
-                )
+                dst_dir = os.path.join(DATA_DIR, f"merged_with_new_{dir_name}")
                 new_data_path = dst_dir
 
                 logger.info("All GPUs")
@@ -631,7 +629,7 @@ def main():
                     dir_name = new_data_path.split("/")[-1]
                     filename_suffix = f"_lambda_{lambda_value}"
                     checkpoint_callback = ModelCheckpoint(
-                        dirpath=RAID_DIR + "/" + CHECKPOINT_DIR,
+                        dirpath=CHECKPOINT_DIR,
                         filename=dir_name
                         + filename_suffix
                         + "_{epoch}-{Recall@10_val:.2f}",
@@ -768,7 +766,7 @@ def main():
 
                     logger.info("Testing...")
                     total_R1, total_R10, total_MRR = [], [], []
-                    dataset_path = RAID_DIR + "/" + DATA_DIR
+                    dataset_path = DATA_DIR
                     testing_paths = [
                         os.path.join(dataset_path, d) for d in os.listdir(dataset_path)
                     ]

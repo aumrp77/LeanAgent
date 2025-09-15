@@ -8,8 +8,11 @@ import generate_benchmark_lean4
 from lean_dojo import LeanGitRepo
 from datetime import datetime
 import lean_dojo
+from lean_dojo.data_extraction.cache import _split_git_url
 from collections import defaultdict
 from dynamic_database import Repository, DynamicDatabase, Theorem
+
+
 
 from loguru import logger
 from typing import Union, List, Tuple
@@ -26,7 +29,7 @@ from filenames import REPO_DIR, DATA_DIR
 def clone_repo(repo_url):
     """Clone a git repository and return the path to the repository and its sha."""
     # TODO: Fix
-    repo_name = "/".join(repo_url.split("/")[-2:]).replace(".git", "")
+    repo_name = os.path.join(*_split_git_url(repo_url)).replace(".git", "")
     logger.info(f"Cloning {repo_url}")
     logger.info(f"Repo name: {repo_name}")
     repo_name = os.path.join(REPO_DIR, repo_name)
@@ -168,7 +171,8 @@ def get_compatible_commit(url):
         
         if url in [repo["url"] + ".git" for repo in repos_and_compatible_commits if repo["commit"]]:
             logger.info(f"Repository {url} already has a compatible commit.")
-            return None, None
+            repo = [repo for repo in repos_and_compatible_commits if repo["url"] + ".git" == url][0]
+            return repo["commit"], repo["version"]
             
         try:
             process = subprocess.Popen(["git", "ls-remote", url], stdout=subprocess.PIPE)

@@ -229,10 +229,16 @@ known_repositories = [
     "madvorak/chomsky",
     "T-Brick/ControlFlow",
     "pa-ba/guarded-lean",
+    
+    
+    
 ]
 
 known_dead_repos = [
     "uwdb/Cosette",
     "notepad-plus-plus/userDefinedLanguages",
     "teorth/analysis",
+    
+    # Added by Mo to find smaller repo to iterate on
+    
 ]

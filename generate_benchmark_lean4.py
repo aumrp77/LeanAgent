@@ -551,13 +551,16 @@ def main(url, commit, dst_dir):
     logger.info("LeanDojo configured")
 
     try:
+        import ipdb; ipdb.set_trace()
         logger.info("Tracing the repo...")
         traced_repo = trace(repo)
         logger.info("Successfully traced the repo")
     except Exception as e:
         logger.info(f"Failed to trace repo {repo} because of {e}")
         return None, 0, 0, 10
+    
     safe_remove_dir(dst_dir)
+    
     splits = split_data(traced_repo)
     logger.info("Successfully split the data")
     num_premises, num_files_traced, total_theorems = export_data(
