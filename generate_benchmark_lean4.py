@@ -549,9 +549,7 @@ def main(url, commit, dst_dir):
     logger.info("Configuring LeanDojo again...")
     configure_leandojo()
     logger.info("LeanDojo configured")
-
     try:
-        import ipdb; ipdb.set_trace()
         logger.info("Tracing the repo...")
         traced_repo = trace(repo)
         logger.info("Successfully traced the repo")

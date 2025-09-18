@@ -28,21 +28,28 @@ from filenames import REPO_DIR, DATA_DIR
 
 def clone_repo(repo_url):
     """Clone a git repository and return the path to the repository and its sha."""
-    # TODO: Fix
     repo_name = os.path.join(*_split_git_url(repo_url)).replace(".git", "")
-    logger.info(f"Cloning {repo_url}")
+    
     logger.info(f"Repo name: {repo_name}")
+    
     repo_name = os.path.join(REPO_DIR, repo_name)
-    
     if os.path.exists(repo_name):
-        print(f"Deleting existing repository directory: {repo_name}")
-        shutil.rmtree(repo_name)
+        print(f"Repository already exists in directory: {repo_name}")
+        process = subprocess.Popen(
+            ["git", "-C", repo_name, "rev-parse", "HEAD"], stdout=subprocess.PIPE
+        )
+        stdout, _stderr = process.communicate()
+    else:
+        logger.info(f"Cloning {repo_url} from scratch")
+        subprocess.run(["git", "clone", repo_url, repo_name])
+        process = subprocess.Popen(["git", "ls-remote", repo_url], stdout=subprocess.PIPE)
+        stdout, _stderr = process.communicate()
     
-    subprocess.run(["git", "clone", repo_url, repo_name])
-    process = subprocess.Popen(["git", "ls-remote", repo_url], stdout=subprocess.PIPE)
-    stdout, _stderr = process.communicate()
     sha = re.split(r"\t+", stdout.decode("utf-8"))[0]
+    sha = sha.strip()
+    print("Sha is " + sha)
     return repo_name, sha
+
 
 
 def branch_exists(repo_name, branch_name):
@@ -231,6 +238,7 @@ def get_compatible_commit(url):
             
             # Delete repo if it exists, because it might be checked out to a different commit
             if os.path.exists(os.path.join("repos", repo_human_name)):
+                logger.info(f"CAREFUL: Deleting existing repo at {os.path.join('repos', repo_human_name)}")
                 shutil.rmtree(os.path.join("repos", repo_human_name))
             
             subprocess.run(["git", "clone", url, os.path.join("repos", repo_human_name)], check=True)
@@ -316,7 +324,6 @@ def search_github_repositories(lean_git_repos, repos, language="Lean", num_repos
                         repo_name, sha = clone_repo(clone_url)
                         name = repo_name
                         url = clone_url.replace(".git", "")
-                        
                         # TODO: This constructor can be very slow
                         lean_git_repo = LeanGitRepo(url, sha)
                         
@@ -325,6 +332,7 @@ def search_github_repositories(lean_git_repos, repos, language="Lean", num_repos
                         cloned_count += 1
                         logger.info(f"Cloned {repo_full_name}")
                     except Exception as e:
+                        logger.info(f"CAREFUL: Deleting existing repo at {os.path.join('repos', repo_full_name)}")
                         shutil.rmtree(name)
                         logger.info(f"Failed to clone {repo_full_name} because of {e}")
                 else:
@@ -359,11 +367,19 @@ def add_repo_to_database(dynamic_database_json_path, repo, db):
         return None
 
     logger.info(f"Found compatible commit {sha} for {url} with lean version: {v}")
+    
+    # Ensure that the repo is checked out to the compatible commit
+    repo_name, _ = clone_repo(url)
+    subprocess.run(["git", "-C", repo_name, "checkout", sha], check=True)
+    logger.info(f"Checked out {url} to commit {sha}")
+    
+    
     url = url.replace(".git", "")
     repo = LeanGitRepo(url, sha)
     dir_name = repo.url.split("/")[-1] + "_" + sha
     dst_dir = os.path.join(DATA_DIR, dir_name)
     logger.info(f"Generating benchmark at {dst_dir}")
+    
     traced_repo, _, _, total_theorems = generate_benchmark_lean4.main(
         repo.url, sha, dst_dir
     )

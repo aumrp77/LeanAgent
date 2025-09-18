@@ -399,6 +399,10 @@ def get_repos(curriculum_learning: bool, num_repos: int, dynamic_database_json_p
     if curriculum_learning:
         logger.info("Starting curriculum learning")
         if is_main_process:
+            if num_repos < 3:
+                logger.warning("num_repos should be at least 3 for curriculum learning")
+            
+            
             lean_git_repos, repos = search_github_repositories(lean_git_repos, repos, "Lean", num_repos)
             
             for i in range(len(lean_git_repos)):
@@ -413,6 +417,9 @@ def get_repos(curriculum_learning: bool, num_repos: int, dynamic_database_json_p
                 f"Successfully added {num_repos} repositories to the database"
             )
 
+            if len(db.repositories) < 3:
+                raise ValueError("The database should contain at least 3 repositories for curriculum learning")
+            
             sorted_repos, categorized_theorems, percentiles = (
                 sort_repositories_by_difficulty(db)
             )

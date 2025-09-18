@@ -1,3 +1,7 @@
+workspace
+workspace-backup
+
+
 *.pkl
 retrieval/bm25
 .idea/
