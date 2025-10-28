@@ -92,30 +92,21 @@ def _process_theorem(
 
 
 @ray.remote(num_cpus=1)
-"""
-A Ray remote class for processing theorems with BM25 retrieval.
-
-This class handles the initialization of necessary components for theorem processing,
-including loading the tokenizer, corpus, and setting up the BM25 retrieval model.
-It provides a method to process individual theorems by retrieving relevant premises.
-
-Parameters
-----------
-tokenizer_path : str
-    Path to the tokenizer file
-data_path : str
-    Path to the data directory containing corpus files
-num_retrieved : int
-    Number of premises to retrieve for each theorem
-use_all_premises : bool
-    Whether to use all available premises or just retrieved ones
-
-Methods
--------
-process_theorem(thm: Dict[str, Any])
-    Process a single theorem, retrieving relevant premises using BM25
-"""
 class TheoremProcessor:
+    """
+    Ray remote class that processes theorems with BM25 retrieval.
+
+    Parameters
+    ----------
+    tokenizer_path : str
+        Path to the tokenizer file.
+    data_path : str
+        Path to the data directory containing corpus files.
+    num_retrieved : int
+        Number of premises to retrieve for each theorem.
+    use_all_premises : bool
+        Whether to use all available premises or just retrieved ones.
+    """
     def __init__(
         self,
         tokenizer_path: str,

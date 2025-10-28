@@ -1,0 +1,2 @@
+hello
+EOF && ls /Users/aum/Desktop/leanagent-work/LeanAgent/testfile_root

@@ -397,7 +397,7 @@ def add_repo_to_database(dynamic_database_json_path, repo, db):
     # Add the new repo to the dynamic database
     config = repo.get_config("lean-toolchain")
     v = generate_benchmark_lean4.get_lean4_version_from_config(config["content"])
-    theorems_folder = os.path.join(dst_dir, "theorems")
+    theorems_folder = os.path.join(dst_dir, "random")
     premise_files_corpus = os.path.join(dst_dir, "corpus.jsonl")
     files_traced = os.path.join(dst_dir, "traced_files.jsonl")
     
@@ -409,7 +409,7 @@ def add_repo_to_database(dynamic_database_json_path, repo, db):
         "lean_version": v,
         "lean_dojo_version": lean_dojo.__version__,
         "metadata": {
-            "date_processed": datetime.datetime.now(),
+            "date_processed": datetime.now(),
         },
         "theorems_folder": theorems_folder,
         "premise_files_corpus": premise_files_corpus,

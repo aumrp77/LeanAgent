@@ -1,7 +1,9 @@
 import os
 
 RAID_DIR = os.environ.get("RAID_DIR")
-os.environ["RAY_TMPDIR"] = os.path.join(RAID_DIR, "tmp")
+ray_tmp = "/tmp/ray"
+os.makedirs(ray_tmp, exist_ok=True)
+os.environ["RAY_TMPDIR"] = ray_tmp
 REPO_DIR = os.path.join(RAID_DIR, "repos")
 DATA_DIR = os.path.join(RAID_DIR, "data")
 CHECKPOINT_DIR = os.path.join(RAID_DIR, "checkpoints")

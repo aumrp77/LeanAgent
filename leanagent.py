@@ -8,6 +8,7 @@ import sys
 import time
 import traceback
 
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional, Set, Tuple
@@ -50,6 +51,30 @@ repos_for_merged_dataset = []
 repos_for_proving = []
 lean_git_repos = []
 repos = []
+
+
+@contextmanager
+def _locked(path: str, mode: str):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, mode) as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield handle
+        finally:
+            if any(flag in mode for flag in ("w", "a", "+")):
+                handle.flush()
+                os.fsync(handle.fileno())
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def read_json_locked(path: str):
+    with _locked(path, "r") as handle:
+        return json.load(handle)
+
+
+def write_json_locked(path: str, obj) -> None:
+    with _locked(path, "w") as handle:
+        json.dump(obj, handle, indent=2, sort_keys=True)
 
 
 def _eval(data, preds_map) -> Tuple[float, float, float]:
@@ -507,7 +532,7 @@ def main():
         use_fisher = False
         single_repo = True
         curriculum_learning = True
-        num_repos = 4
+        num_repos = 3
         dynamic_database_json_path = os.path.join(RAID_DIR, DB_FILE_NAME)
 
         lambdas = None
@@ -529,18 +554,11 @@ def main():
         lean_git_repos, repos, updated_repos = get_repos(curriculum_learning, num_repos, dynamic_database_json_path, db)
 
         repo_info_file = os.path.join(DATA_DIR, "repo_info_compatible.json")
-        lock_path = f"{repo_info_file}.lock"
         max_attempts = 30
         for attempt in range(max_attempts):
             try:
-                with open(lock_path, "a") as lock_handle:
-                    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
-                    try:
-                        with open(repo_info_file, "r") as f:
-                            repo_info = json.load(f)
-                        break
-                    finally:
-                        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+                repo_info = read_json_locked(repo_info_file)
+                break
             except (json.JSONDecodeError, FileNotFoundError):
                 if attempt == max_attempts - 1:
                     raise Exception(
