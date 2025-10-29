@@ -270,7 +270,7 @@ def prove_sorry_theorems(
     all_encountered_theorems: Set[Tuple[str, str, Tuple[int, int], Tuple[int, int]]] = (
         set()
     )
-    last_save_time = datetime.datetime.now()
+    last_save_time = datetime.now()
     save_interval = timedelta(minutes=30)
 
     # Load previously encountered theorems
@@ -333,7 +333,7 @@ def prove_sorry_theorems(
                 theorem_batch = []
                 positions_batch = []
 
-            current_time = datetime.datetime.now()
+            current_time = datetime.now()
             if current_time - last_save_time >= save_interval:
                 save_progress(all_encountered_theorems)
                 last_save_time = current_time
