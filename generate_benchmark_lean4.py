@@ -9,7 +9,7 @@ from collections import defaultdict
 from copy import copy
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Optional, Tuple
 import os
 import lean_dojo
 import networkx as nx
@@ -24,6 +24,49 @@ SPLIT_NAME = str  # train/val/test
 SPLIT = Dict[SPLIT_NAME, List[TracedTheorem]]
 SPLIT_STRATEGY = str
 _LEAN4_VERSION_REGEX = re.compile(r"leanprover/lean4:(?P<version>.+?)")
+_REQUIRED_EXPORT_FILES = [
+    ("metadata.json",),
+    ("corpus.jsonl",),
+    ("traced_files.jsonl",),
+    ("random", "train.json"),
+    ("random", "val.json"),
+    ("random", "test.json"),
+    ("novel_premises", "train.json"),
+    ("novel_premises", "val.json"),
+    ("novel_premises", "test.json"),
+]
+
+
+def _existing_export_stats(dst_path: Union[str, Path]) -> Optional[Tuple[int, int, int]]:
+    """Return cached export statistics if the dataset artifacts already exist."""
+    dst_path = Path(dst_path)
+    required_paths = [dst_path.joinpath(*parts) for parts in _REQUIRED_EXPORT_FILES]
+
+    if not all(path.is_file() and path.stat().st_size > 0 for path in required_paths):
+        return None
+
+    metadata_path = dst_path / "metadata.json"
+    try:
+        metadata = json.load(metadata_path.open("rt"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    required_keys = {"total_theorems", "num_premises", "num_files_traced"}
+    if not required_keys.issubset(metadata.keys()):
+        return None
+
+    try:
+        total_theorems = int(metadata["total_theorems"])
+        num_premises = int(metadata["num_premises"])
+        num_files_traced = int(metadata["num_files_traced"])
+    except (TypeError, ValueError):
+        return None
+
+    if total_theorems <= 0 or num_premises < 0 or num_files_traced <= 0:
+        return None
+
+    logger.info(f"Reusing cached export at {dst_path}")
+    return num_premises, num_files_traced, total_theorems
 
 
 def get_lean4_version_from_config(toolchain: str) -> str:
@@ -465,7 +508,19 @@ def export_data(
     logger.info("Successfully exported the premises")
 
     # Export metadata.
-    export_metadata(traced_repo, dst_path, **kwargs)
+    split_summary = {
+        strategy: {name: len(theorems) for name, theorems in split.items()}
+        for strategy, split in splits.items()
+    }
+    export_metadata(
+        traced_repo,
+        dst_path,
+        total_theorems=total_theorems,
+        num_premises=num_premises,
+        num_files_traced=num_files_traced,
+        split_counts=split_summary,
+        **kwargs,
+    )
     logger.info("Successfully exported the metadata")
 
     return num_premises, num_files_traced, total_theorems
@@ -556,9 +611,14 @@ def main(url, commit, dst_dir):
     except Exception as e:
         logger.info(f"Failed to trace repo {repo} because of {e}")
         return None, 0, 0, 10
-    
+
+    cached_stats = _existing_export_stats(dst_dir)
+    if cached_stats is not None:
+        num_premises, num_files_traced, total_theorems = cached_stats
+        return traced_repo, num_premises, num_files_traced, total_theorems
+
     safe_remove_dir(dst_dir)
-    
+
     splits = split_data(traced_repo)
     logger.info("Successfully split the data")
     num_premises, num_files_traced, total_theorems = export_data(
