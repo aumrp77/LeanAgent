@@ -429,23 +429,54 @@ def get_repos(curriculum_learning: bool, num_repos: int, dynamic_database_json_p
                 logger.warning("num_repos should be at least 3 for curriculum learning")
             
             
-            lean_git_repos, repos = search_github_repositories(lean_git_repos, repos, "Lean", num_repos)
-            
-            for i in range(len(lean_git_repos)):
-                repo = lean_git_repos[i]
-                print("\n\n")
-                logger.info(f"Processing new repo: {repo.url}")
-                result = add_repo_to_database(dynamic_database_json_path, repo, db)
-                if result is not None:
-                    logger.info(f"Successfully added repo {repo.url}")
-            
-            logger.info(
-                f"Successfully added {num_repos} repositories to the database"
+            existing_repo_count = len(db.repositories)
+            target_repo_count = max(3, num_repos)
+
+            lean_git_repos, repos = search_github_repositories(
+                lean_git_repos, repos, "Lean", target_repo_count
             )
 
-            if len(db.repositories) < 3:
-                raise ValueError("The database should contain at least 3 repositories for curriculum learning")
-            
+            processed_idx = 0
+            extra_searches = 0
+            max_extra_searches = 10
+
+            while len(db.repositories) < target_repo_count:
+                while (
+                    processed_idx < len(lean_git_repos)
+                    and len(db.repositories) < target_repo_count
+                ):
+                    repo = lean_git_repos[processed_idx]
+                    processed_idx += 1
+                    print("\n\n")
+                    logger.info(f"Processing new repo: {repo.url}")
+                    result = add_repo_to_database(
+                        dynamic_database_json_path, repo, db
+                    )
+                    if result is not None:
+                        logger.info(f"Successfully added repo {repo.url}")
+
+                if len(db.repositories) >= target_repo_count:
+                    break
+
+                if extra_searches >= max_extra_searches:
+                    raise ValueError(
+                        "Unable to find enough compatible repositories for curriculum learning"
+                    )
+
+                extra_searches += 1
+                needed = max(1, target_repo_count - len(db.repositories))
+                logger.info(
+                    f"Searching for {needed} additional repositories to meet the curriculum requirement"
+                )
+                lean_git_repos, repos = search_github_repositories(
+                    lean_git_repos, repos, "Lean", needed
+                )
+
+            newly_added = len(db.repositories) - existing_repo_count
+            logger.info(
+                f"Successfully added {newly_added} repositories to the database (total: {len(db.repositories)})"
+            )
+
             sorted_repos, categorized_theorems, percentiles = (
                 sort_repositories_by_difficulty(db)
             )
