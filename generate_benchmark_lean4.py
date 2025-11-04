@@ -465,7 +465,19 @@ def export_data(
     logger.info("Successfully exported the premises")
 
     # Export metadata.
-    export_metadata(traced_repo, dst_path, **kwargs)
+    split_summary = {
+        strategy: {name: len(theorems) for name, theorems in split.items()}
+        for strategy, split in splits.items()
+    }
+    export_metadata(
+        traced_repo,
+        dst_path,
+        total_theorems=total_theorems,
+        num_premises=num_premises,
+        num_files_traced=num_files_traced,
+        split_counts=split_summary,
+        **kwargs,
+    )
     logger.info("Successfully exported the metadata")
 
     return num_premises, num_files_traced, total_theorems
@@ -529,17 +541,15 @@ def main(url, commit, dst_dir):
         logger.info("Unsupported version")
     v = v[1:]  # ignore "v" at beginning
 
-    lean_dir2 = f"/Users/motiwari/.elan/toolchains/leanprover--lean4---{v}"
-    lean_dir3 = f"/Users/motiwari/.elan/toolchains/leanprover--lean4---{v}"
-    logger.info(f"lean path2 {lean_dir2}")
-    logger.info(f"lean path3 {lean_dir3}")
-    if not os.path.exists(lean_dir2):
-        logger.info(f"Lean toolchain path 2 does not exist: {lean_dir2}")
-    if not os.path.exists(lean_dir3):
-        logger.info(f"Lean toolchain path 3 does not exist: {lean_dir3}")
-    os.environ["LEAN4_PATH"] = lean_dir2
-    os.environ["PATH"] = f"{lean_dir2}/bin:{os.environ.get('PATH', '')}"
-    logger.info(f"Switched to Lean toolchain at: {lean_dir2}")
+    elan_toolchains = Path(
+        os.environ.get("ELAN_TOOLCHAINS", Path.home() / ".elan" / "toolchains")
+    )
+    lean_dir = elan_toolchains / f"leanprover--lean4---{v}"
+    if not lean_dir.exists():
+        logger.warning(f"Lean toolchain path does not exist locally: {lean_dir}")
+    os.environ["LEAN4_PATH"] = str(lean_dir)
+    os.environ["PATH"] = f"{lean_dir}/bin:{os.environ.get('PATH', '')}"
+    logger.info(f"Switched to Lean toolchain at: {lean_dir}")
 
     logger.info(
         f"lean --version: {subprocess.run(['lean', '--version'], capture_output=True).stdout.decode('utf-8')}"
@@ -553,6 +563,12 @@ def main(url, commit, dst_dir):
         logger.info("Tracing the repo...")
         traced_repo = trace(repo)
         logger.info("Successfully traced the repo")
+        traced_files_count = len(traced_repo.traced_files)
+        deps_count = sum(len(tf.get_premise_definitions()) for tf in traced_repo.traced_files)
+        logger.info(
+            f"Trace summary for {url}@{commit}: "
+            f"{traced_files_count} traced files, {deps_count} premise definitions discovered"
+        )
     except Exception as e:
         logger.info(f"Failed to trace repo {repo} because of {e}")
         return None, 0, 0, 10
@@ -565,4 +581,8 @@ def main(url, commit, dst_dir):
         traced_repo, splits, dst_dir
     )
     logger.info("Successfully exported the data")
+    logger.info(
+        f"Export summary for {url}@{commit}: "
+        f"{total_theorems} theorems, {num_premises} premises, {num_files_traced} traced files"
+    )
     return traced_repo, num_premises, num_files_traced, total_theorems

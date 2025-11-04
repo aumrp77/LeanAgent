@@ -15,7 +15,7 @@ from dynamic_database import Repository, DynamicDatabase, Theorem
 
 
 from loguru import logger
-from typing import Union, List, Tuple
+from typing import Union, List, Tuple, Optional
 import math
 import os
 
@@ -24,6 +24,46 @@ from constants import known_repositories, known_dead_repos, PR_TITLE, PR_BODY, T
 personal_access_token = os.environ.get("GITHUB_ACCESS_TOKEN")
 BATCH_SIZE = 4
 from filenames import REPO_DIR, DATA_DIR
+
+MIN_SUPPORTED_LEAN_VERSION = (4, 6, 0)
+MIN_SUPPORTED_LEAN_VERSION_STR = "v4.6.0"
+PAUSE_AFTER_TRACE = os.environ.get("PAUSE_AFTER_TRACE", "0") == "1"
+
+
+def _parse_lean_version(version: str) -> Optional[Tuple[int, int, int]]:
+    version = version.lower().lstrip("v")
+    if not version:
+        return None
+    base = version.split("-")[0]
+    parts = base.split(".")
+    if len(parts) < 2:
+        return None
+    while len(parts) < 3:
+        parts.append("0")
+    try:
+        major, minor, patch = (int(parts[0]), int(parts[1]), int(parts[2]))
+    except ValueError:
+        return None
+    return major, minor, patch
+
+
+def _is_supported_lean_version(version: str) -> bool:
+    parsed = _parse_lean_version(version)
+    if parsed is None:
+        return False
+    return parsed >= MIN_SUPPORTED_LEAN_VERSION
+
+
+def _pause_after_trace(repo_url: str, status: str) -> None:
+    if not PAUSE_AFTER_TRACE:
+        return
+    try:
+        input(
+            f"[TRACE] {repo_url} finished with status '{status}'. "
+            "Press Enter to continue..."
+        )
+    except KeyboardInterrupt:
+        raise
 
 
 def clone_repo(repo_url):
@@ -360,38 +400,81 @@ def add_repo_to_database(dynamic_database_json_path, repo, db):
         url = url + ".git"
     logger.info(f"\n\nProcessing {url}")
 
+    normalized_url = url.replace(".git", "")
+
     sha, v = get_compatible_commit(url)
 
     if not sha:
         logger.info(f"Failed to find a compatible commit for {url}")
-        return None
+        status = "no_compatible_commit"
+        _pause_after_trace(normalized_url, status)
+        return status
 
     logger.info(f"Found compatible commit {sha} for {url} with lean version: {v}")
     
+    if db.get_repository(normalized_url, sha) is not None:
+        logger.info(
+            f"Repository {normalized_url}@{sha} already present in dynamic database. Skipping."
+        )
+        status = "already_present"
+        _pause_after_trace(normalized_url, status)
+        return status
+
+    parsed_version = _parse_lean_version(v)
+    if parsed_version is None or not _is_supported_lean_version(v):
+        logger.info(
+            f"Skipping {normalized_url} due to unsupported Lean toolchain {v}. "
+            f"Minimum required {MIN_SUPPORTED_LEAN_VERSION_STR}"
+        )
+        status = "unsupported_toolchain"
+        _pause_after_trace(normalized_url, status)
+        return status
+
     # Ensure that the repo is checked out to the compatible commit
     repo_name, _ = clone_repo(url)
     subprocess.run(["git", "-C", repo_name, "checkout", sha], check=True)
     logger.info(f"Checked out {url} to commit {sha}")
     
     
-    url = url.replace(".git", "")
-    repo = LeanGitRepo(url, sha)
+    repo = LeanGitRepo(normalized_url, sha)
     dir_name = repo.url.split("/")[-1] + "_" + sha
     dst_dir = os.path.join(DATA_DIR, dir_name)
     logger.info(f"Generating benchmark at {dst_dir}")
     
-    traced_repo, _, _, total_theorems = generate_benchmark_lean4.main(
+    traced_repo, num_premises, num_files_traced, total_theorems = generate_benchmark_lean4.main(
         repo.url, sha, dst_dir
     )
     
     if not traced_repo:
         logger.info(f"Failed to trace {url}")
-        return None
+        shutil.rmtree(dst_dir, ignore_errors=True)
+        status = "trace_failed"
+        _pause_after_trace(normalized_url, status)
+        return status
     
+    if total_theorems is None:
+        logger.info(f"Trace produced no theorem count for {url}")
+        shutil.rmtree(dst_dir, ignore_errors=True)
+        status = "missing_theorem_count"
+        _pause_after_trace(normalized_url, status)
+        return status
+
+    logger.info(
+        f"Trace produced {total_theorems} theorems for {url} "
+        f"(minimum required {3 * BATCH_SIZE})"
+    )
+
     if total_theorems < 3 * BATCH_SIZE:  # Require enough theorems for train/val/test
         logger.info(f"Not enough theorems found in {url}")
-        return None
-    
+        shutil.rmtree(dst_dir, ignore_errors=True)
+        status = "insufficient_theorems"
+        _pause_after_trace(normalized_url, status)
+        return status
+
+    logger.info(
+        f"Export includes {num_premises} premises across {num_files_traced} traced files"
+    )
+
     logger.info(f"Finished generating benchmark at {dst_dir}")
 
     # Add the new repo to the dynamic database
@@ -427,7 +510,9 @@ def add_repo_to_database(dynamic_database_json_path, repo, db):
     db.print_database_contents()
     
     db.to_json(dynamic_database_json_path)
-    return "Done"
+    status = "success"
+    _pause_after_trace(normalized_url, status)
+    return status
 
 def calculate_difficulty(theorem: Theorem) -> Union[float, None]:
     """Calculates the difficulty of a theorem."""

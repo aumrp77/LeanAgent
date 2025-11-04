@@ -158,6 +158,7 @@ known_repositories = [
     "proost-assistant/ProostLean",
     "DavePearce/LeanEVM",
     "algebraic-dev/ash",
+    "google-deepmind/formal-conjectures",
     "FormalizedFormalLogic/Arithmetization",
     "cmu-l3/ntp-toolkit",
     "dwrensha/tryAtEachStep",

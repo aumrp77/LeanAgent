@@ -52,6 +52,21 @@ repos_for_proving = []
 lean_git_repos = []
 repos = []
 
+SEED_REPOS = [
+    LeanGitRepo(
+        "https://github.com/ImperialCollegeLondon/FLT",
+        "b208a302cdcbfadce33d8165f0b054bfa17e2147",
+    ),
+    LeanGitRepo(
+        "https://github.com/HEPLean/PhysLean",
+        "60f1ebc3eb015f78a3719ee4085344a600d0af50",
+    ),
+    LeanGitRepo(
+        "https://github.com/verse-lab/veil",
+        "a9fe7205c57f7b6ee8b350bfc87b9b4b28c57781",
+    ),
+]
+
 
 @contextmanager
 def _locked(path: str, mode: str):
@@ -427,8 +442,26 @@ def get_repos(curriculum_learning: bool, num_repos: int, dynamic_database_json_p
         if is_main_process:
             if num_repos < 3:
                 logger.warning("num_repos should be at least 3 for curriculum learning")
-            
-            
+
+            failure_records: List[Tuple[str, str]] = []
+
+            for seed_repo in SEED_REPOS:
+                if db.get_repository(seed_repo.url, seed_repo.commit) is None:
+                    logger.info(
+                        f"Seeding database with {seed_repo.url}@{seed_repo.commit}"
+                    )
+                    result = add_repo_to_database(
+                        dynamic_database_json_path, seed_repo, db
+                    )
+                    if result in ("success", "already_present"):
+                        logger.info(f"Seeded repo {seed_repo.url}")
+                    else:
+                        failure_records.append((seed_repo.url, result))
+                else:
+                    logger.info(
+                        f"Seed repository {seed_repo.url}@{seed_repo.commit} already present"
+                    )
+
             existing_repo_count = len(db.repositories)
             target_repo_count = max(3, num_repos)
 
@@ -452,8 +485,10 @@ def get_repos(curriculum_learning: bool, num_repos: int, dynamic_database_json_p
                     result = add_repo_to_database(
                         dynamic_database_json_path, repo, db
                     )
-                    if result is not None:
+                    if result in ("success", "already_present"):
                         logger.info(f"Successfully added repo {repo.url}")
+                    else:
+                        failure_records.append((repo.url, result))
 
                 if len(db.repositories) >= target_repo_count:
                     break
@@ -471,6 +506,11 @@ def get_repos(curriculum_learning: bool, num_repos: int, dynamic_database_json_p
                 lean_git_repos, repos = search_github_repositories(
                     lean_git_repos, repos, "Lean", needed
                 )
+
+            if failure_records:
+                logger.warning("Tracing failures/skip summary:")
+                for repo_url, reason in failure_records:
+                    logger.warning(f"  {repo_url} -> {reason}")
 
             newly_added = len(db.repositories) - existing_repo_count
             logger.info(
