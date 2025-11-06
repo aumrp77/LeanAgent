@@ -243,3 +243,76 @@ known_dead_repos = [
     # Added by Mo to find smaller repo to iterate on
     
 ]
+
+# Repos that appear in the paper – trace these first, in this order.
+PAPER_REPOS = [
+    {"url": "https://github.com/leanprover-community/PFR",
+     "commit": "fa398a5b853c7e94e3294c45e50c6aee013a2687"},
+
+    {"url": "https://github.com/leanprover-community/hairy-ball-theorem",
+     "commit": "a778826d19c8a7ddf1d26beeea628c45450612e6"},
+
+    {"url": "https://github.com/leanprover-community/coxeter",
+     "commit": "96af8aee7943ca8685ed1b00cc83a559ea389a97"},
+
+    {"url": "https://github.com/avigad/mathematics_in_lean_source",
+     "commit": "5297e0fb051367c48c0a084411853a576389ecf5"},
+
+    {"url": "https://github.com/leanprover-community/formal-book",
+     "commit": "6fbe8c2985008c0bfb30050750a71b90388ad3a3"},
+
+    {"url": "https://github.com/yangky11/miniF2F-lean4",
+     "commit": "9e445f5435407f014b88b44a98436d50dd7abd00"},
+
+    {"url": "https://github.com/lecopivo/SciLean",
+     "commit": "22d53b2f4e3db2a172e71da6eb9c916e62655744"},
+
+    {"url": "https://github.com/leanprover-community/carleson",
+     "commit": "bec7808b907190882fa1fa54ce749af297c6cf37"},
+
+    {"url": "https://github.com/leanprover-community/lean4-pdl",
+     "commit": "c7f649fe3c4891cf1a01c120e82ebc5f6199856e"},
+
+    {"url": "https://github.com/AlexKontorovich/PrimeNumberTheoremAnd",
+     "commit": "29baddd685660b5fedd7bd67f9916ae24253d566"},
+
+    {"url": "https://github.com/dwrensha/compfiles",
+     "commit": "f99bf6f2928d47dd1a445b414b3a723c2665f091"},
+
+    {"url": "https://github.com/ImperialCollegeLondon/FLT",
+     "commit": "b208a302cdcbfadce33d8165f0b054bfa17e2147"},
+
+    {"url": "https://github.com/TODO/debate",
+     "commit": "7fb39251b705797ee54e08c96177fabd29a5b5a3"},
+
+    {"url": "https://github.com/TODO/lean4lean",
+     "commit": "05b1f4a68c5facea96a5ee51c6a56fef21276e0f"},
+
+    {"url": "https://github.com/eric-wieser/lean-matrix-cookbook",
+     "commit": "f15a149d321ac99ff9b9c024b58e7882f564669f"},
+
+    {"url": "https://github.com/TODO/math-workshop",
+     "commit": "5acd4b933d47fd6c1032798a6046c1baf261445d"},
+
+    {"url": "https://github.com/TODO/LeanEuclid",
+     "commit": "f1912c3090eb82820575758efc31e40b9db86bb8"},
+
+    {"url": "https://github.com/FormalizedFormalLogic/Foundation",
+     "commit": "d5fe5d057a90a0703a745cdc318a1b6621490c21"},
+
+    {"url": "https://github.com/TODO/Con-nf",
+     "commit": "00bdc85ba7d486a9e544a0806a1018dd06fa3856"},
+
+    {"url": "https://github.com/TODO/Saturn",
+     "commit": "3811a9dd46cdfd5fa0c0c1896720c28d2ec4a42a"},
+
+    {"url": "https://github.com/ahhwuhu/zeta_3_irrational",
+     "commit": "914712200e463cfc97fe37e929d518dd58806a38"},
+
+    {"url": "https://github.com/TODO/Formalization-of-Constructable-Numbers",
+     "commit": "01ef1f22a04f2ba8081c5fb29413f515a0e52878"},
+
+    {"url": "https://github.com/LeanAPAP/LeanAPAP",
+     "commit": "951c660a8d7ba8e39f906fdf657674a984effa8b"},
+]
+

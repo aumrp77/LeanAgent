@@ -70,7 +70,9 @@ SEED_REPOS = [
 
 @contextmanager
 def _locked(path: str, mode: str):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
     with open(path, mode) as handle:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
         try:
@@ -87,9 +89,27 @@ def read_json_locked(path: str):
         return json.load(handle)
 
 
-def write_json_locked(path: str, obj) -> None:
+def write_json_locked(
+    path: str,
+    obj,
+    *,
+    indent: int = 2,
+    ensure_ascii: bool = False,
+    sort_keys: bool = False,
+) -> None:
     with _locked(path, "w") as handle:
-        json.dump(obj, handle, indent=2, sort_keys=True)
+        json.dump(
+            obj,
+            handle,
+            indent=indent,
+            ensure_ascii=ensure_ascii,
+            sort_keys=sort_keys,
+        )
+
+
+def save_database_locked(db: DynamicDatabase, path: str) -> None:
+    """Persist the dynamic database safely across processes."""
+    write_json_locked(path, db.to_dict(), ensure_ascii=False)
 
 
 def _eval(data, preds_map) -> Tuple[float, float, float]:
@@ -222,7 +242,7 @@ def process_theorem_batch(
         else:
             logger.warning(f"Unexpected result type")
 
-    db.to_json(dynamic_database_json_path)
+    save_database_locked(db, dynamic_database_json_path)
 
 
 def save_progress(all_encountered_theorems):
@@ -414,7 +434,7 @@ def initialize_database(dynamic_database_json_path: str) -> DynamicDatabase:
                 f"\nInitializing new database at {dynamic_database_json_path}\n"
             )
             db = DynamicDatabase()
-            db.to_json(dynamic_database_json_path)
+            save_database_locked(db, dynamic_database_json_path)
         else:
             try:
                 logger.info(f"Loading database from {dynamic_database_json_path}")
@@ -426,7 +446,7 @@ def initialize_database(dynamic_database_json_path: str) -> DynamicDatabase:
                     f"Error decoding JSON from {dynamic_database_json_path}. Initializing new database."
                 )
                 db = DynamicDatabase()
-                db.to_json(dynamic_database_json_path)
+                save_database_locked(db, dynamic_database_json_path)
     
     return db
 
@@ -522,7 +542,7 @@ def get_repos(curriculum_learning: bool, num_repos: int, dynamic_database_json_p
             )
             
             print("Sorted repositories. Saving now...")
-            db.to_json(dynamic_database_json_path)
+            save_database_locked(db, dynamic_database_json_path)
             save_sorted_repos(sorted_repos, "sorted_repos.json")
             
             print("Summary of theorem difficulties by URL:")
@@ -982,7 +1002,7 @@ def main():
                         prove_sorry_theorems(
                             db, prover, dynamic_database_json_path, repos_for_proving
                         )
-                    db.to_json(dynamic_database_json_path)
+                    save_database_locked(db, dynamic_database_json_path)
 
                     logger.info("Finished searching for proofs of sorry theorems")
 
