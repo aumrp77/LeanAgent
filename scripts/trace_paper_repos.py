@@ -12,114 +12,87 @@ Run from repo root:
 import os
 import json
 import pathlib
+import sys
 
-from lean_dojo import LeanGitRepo
-from lean_dojo.data_extraction.trace import get_traced_repo_path
+HERE = pathlib.Path(__file__).resolve()
+REPO_ROOT = HERE.parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from lean_dojo import LeanGitRepo  # noqa: E402
+from lean_dojo.data_extraction.trace import get_traced_repo_path  # noqa: E402
 
 
 # hardcoded list reconstructed from the paper / convo
+# ==== Already traced ====
+# 1. teorth/pfr FAITHFUL
+# 2. avigad/mathematics_in_lean_source
+# 3. yangky11/miniF2F-lean4
+# 6. AlexKontorovich/PrimeNumberTheoremAnd
+# 7. dwrensha/compfiles
+# 8. ImperialCollegeLondon/FLT
+# 9. verse-lab/veil
+# 10. eric-wieser/lean-matrix-cookbook
+
+# ==== Heavy / needs fix ====
+# 4. lecopivo/SciLean (macOS SG_READ_ONLY crash)
+# 11. loganrjmurphy/LeanEuclid (same)
+
+# ==== Remaining targets ====
+# PAPER_REPOS = [
+#     {
+#         "owner": "dwrensha",
+#         "name": "compfiles",
+#         "sha": "f99bf6f2928d47dd1a445b414b3a723c2665f091",
+#     },
+#     {
+#         "owner": "avigad",
+#         "name": "mathematics_in_lean_source",
+#         "sha": "5297e0fb051367c48c0a084411853a576389ecf5",
+#     },
+#     {
+#         "owner": "yangky11",
+#         "name": "miniF2F-lean4",
+#         "sha": "9e445f5435407f014b88b44a98436d50dd7abd00",
+#     },
+#     {
+#         "owner": "teorth",
+#         "name": "pfr",
+#         "sha": "fa398a5b853c7e94e3294c45e50c6aee013a2687",
+#     },
+#     {
+#         "owner": "ImperialCollegeLondon",
+#         "name": "FLT",
+#         "sha": "b208a302cdcbfadce33d8165f0b054bfa17e2147",
+#     },
+#     {
+#         "owner": "verse-lab",
+#         "name": "veil",
+#         "sha": "a9fe7205c57f7b6ee8b350bfc87b9b4b28c57781",
+#     },
+# ]
+
 PAPER_REPOS = [
-    # 1. teorth/pfr
-    # {
-    #     "owner": "teorth",
-    #     "name": "pfr",
-    #     "sha": "fa398a5b853c7e94e3294c45e50c6aee013a2687",
-    # },
-    # 2. avigad/mathematics_in_lean_source
     {
-        "owner": "avigad",
-        "name": "mathematics_in_lean_source",
-        "sha": "5297e0fb051367c48c0a084411853a576389ecf5",
+        "owner": "lecopivo",
+        "name": "SciLean",
+        "sha": "22d53b2f4e3db2a172e71da6eb9c916e62655744",
     },
-    {
-        "owner": "verse-lab",
-        "name": "veil",
-        "sha": "a9fe7205c57f7b6ee8b350bfc87b9b4b28c57781",
-    },
-    # 3. miniF2F
-    {
-        "owner": "yangky11",
-        "name": "miniF2F-lean4",
-        "sha": "9e445f5435407f014b88b44a98436d50dd7abd00",
-    },
-    # 4. SciLean (in paper → we must make it work eventually)
-    # {
-    #     "owner": "lecopivo",
-    #     "name": "SciLean",
-    #     "sha": "22d53b2f4e3db2a172e71da6eb9c916e62655744",
-    # },
-    # 5. teorth/lean4-pdl
-    {
-        "owner": "teorth",
-        "name": "lean4-pdl",
-        "sha": "c7f649fe3c4891cf1a01c120e82ebc5f6199856e",
-    },
-    # 6. prime number theorem notes
-    {
-        "owner": "AlexKontorovich",
-        "name": "PrimeNumberTheoremAnd",
-        "sha": "29baddd685660b5fedd7bd67f9916ae24253d566",
-    },
-    # 7. compfiles
-    {
-        "owner": "dwrensha",
-        "name": "compfiles",
-        "sha": "f99bf6f2928d47dd1a445b414b3a723c2665f091",
-    },
-    # 8. FLT
-    {
-        "owner": "ImperialCollegeLondon",
-        "name": "FLT",
-        "sha": "b208a302cdcbfadce33d8165f0b054bfa17e2147",
-    },
-    {
-        "owner": "verse-lab",
-        "name": "veil",
-        "sha": "a9fe7205c57f7b6ee8b350bfc87b9b4b28c57781",
-    },
-    # 9. lean4-cli (paper mentions tooling repos; we saw this in your crawl)
-    {
-        "owner": "leanprover-community",
-        "name": "lean4-cli",
-        "sha": "05b1f4a68c5facea96a5ee51c6a56fef21276e0f",
-    },
-    # 10. matrix cookbook
-    {
-        "owner": "eric-wieser",
-        "name": "lean-matrix-cookbook",
-        "sha": "f15a149d321ac99ff9b9c024b58e7882f564669f",
-    },
-    # 11. LeanEuclid
     {
         "owner": "loganrjmurphy",
         "name": "LeanEuclid",
         "sha": "f1912c3090eb82820575758efc31e40b9db86bb8",
     },
-    # 12. formalized logic foundation
     {
         "owner": "FormalizedFormalLogic",
         "name": "Foundation",
         "sha": "d5fe5d057a90a0703a745cdc318a1b6621490c21",
     },
-    # 13. con-nf
-    {
-        "owner": "pengbaolin",
-        "name": "con-nf",
-        "sha": "00bdc85ba7d486a9e544a0806a1018dd06fa3856",
-    },
-    # 14. zeta_3_irrational
-    {
-        "owner": "ahhwuhu",
-        "name": "zeta_3_irrational",
-        "sha": "914712200e463cfc97fe37e929d518dd58806a38",
-    },
-    # 15. LeanAPAP
-    {
-        "owner": "judicael-pvt",
-        "name": "LeanAPAP",
-        "sha": "951c660a8d7ba8e39f906fdf657674a984effa8b",
-    },
-    # paper had a few that we couldn't map to GH — keep extensible
+#     {
+#         "owner": "TODO",
+#         "name": "lean4lean",
+#         "sha": "05b1f4a68c5facea96a5ee51c6a56fef21276e0f",
+#     },
 ]
 
 
@@ -166,7 +139,7 @@ def main() -> None:
         print(f"\n=== tracing {url}@{commit} ===")
         try:
             repo = LeanGitRepo(url, commit)
-            traced_path = get_traced_repo_path(repo, build_deps=False)
+            traced_path = get_traced_repo_path(repo, build_deps=True)
             traced_path = pathlib.Path(traced_path)
             print(f"  lean_dojo traced into cache: {traced_path}")
         except Exception as e:

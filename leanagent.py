@@ -112,6 +112,10 @@ def save_database_locked(db: DynamicDatabase, path: str) -> None:
     write_json_locked(path, db.to_dict(), ensure_ascii=False)
 
 
+def append_text_locked(path: str, *chunks: str) -> None:
+    """Atomically append textual data while coordinating concurrent writers."""
+    with _locked(path, "a") as handle:
+        handle.writelines(chunks)
 def _eval(data, preds_map) -> Tuple[float, float, float]:
     """Evaluates the retrieval model."""
     R1 = []
@@ -892,11 +896,11 @@ def main():
                         os.path.join(dataset_path, d) for d in os.listdir(dataset_path)
                     ]
                     if is_main_process:
-                        with open(EVAL_RESULTS_FILE_PATH, "a") as f:
-                            f.write("\n\n\n")
-                            f.write(
-                                f"Results for {dir_name} with lambda = {lambda_value}"
-                            )
+                        append_text_locked(
+                            EVAL_RESULTS_FILE_PATH,
+                            "\n\n\n",
+                            f"Results for {dir_name} with lambda = {lambda_value}",
+                        )
                     for data_path in testing_paths:
                         if "merged" not in data_path:
                             continue
@@ -919,11 +923,13 @@ def main():
                             total_R1.append(R1)
                             total_R10.append(R10)
                             total_MRR.append(MRR)
-                            with open(EVAL_RESULTS_FILE_PATH, "a") as f:
-                                f.write("\n\n\n")
-                                f.write(f"Intermediate results for {data_path}")
-                                f.write("\n\n\n")
-                                f.write(f"R@1 = {R1} %, R@10 = {R10} %, MRR = {MRR}")
+                            append_text_locked(
+                                EVAL_RESULTS_FILE_PATH,
+                                "\n\n\n",
+                                f"Intermediate results for {data_path}",
+                                "\n\n\n",
+                                f"R@1 = {R1} %, R@10 = {R10} %, MRR = {MRR}",
+                            )
 
                     if is_main_process:
                         avg_R1 = np.mean(total_R1)
@@ -935,13 +941,13 @@ def main():
                         )
 
                         if not os.path.exists(EVAL_RESULTS_FILE_PATH):
-                            open(EVAL_RESULTS_FILE_PATH, "w").close()
+                            append_text_locked(EVAL_RESULTS_FILE_PATH, "")
 
-                        with open(EVAL_RESULTS_FILE_PATH, "a") as f:
-                            f.write("\n\n\n")
-                            f.write(
-                                f"Average R@1 = {avg_R1} %, R@10 = {avg_R10} %, MRR = {avg_MRR}"
-                            )
+                        append_text_locked(
+                            EVAL_RESULTS_FILE_PATH,
+                            "\n\n\n",
+                            f"Average R@1 = {avg_R1} %, R@10 = {avg_R10} %, MRR = {avg_MRR}",
+                        )
                 else:
                     model_checkpoint_path = f"{RAID_DIR}/checkpoints/mathlib4_29dcec074de168ac2bf835a77ef68bbe069194c5.ckpt"
                     if result is None:
