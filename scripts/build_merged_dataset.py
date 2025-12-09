@@ -49,6 +49,9 @@ _SLUG_TO_URL = {
     item["name"]: f"https://github.com/{item['owner']}/{item['name']}"
     for item in PAPER_REPOS
 }
+# Add alternative names for repos with different directory names
+_SLUG_TO_URL["formal_book"] = "https://github.com/mo271/FormalBook"
+_SLUG_TO_URL["hairy-ball-theorem-lean"] = "https://github.com/leanprover-community/hairy-ball-theorem"
 
 
 def _infer_repo_from_dir(dir_path: Path) -> tuple[str, str]:
@@ -95,21 +98,104 @@ def main() -> None:
 
     # Add repos discovered from existing corpora
     data_root = raid_dir / "data"
+    if not data_root.exists():
+        logger.warning(f"{data_root} does not exist. Checking {raid_dir} directly...")
+        data_root = raid_dir
+
     targets = []
     for d, cj in iter_nonempty_corpora(data_root):
         try:
+            # We don't strictly need url/commit here if we trust metadata.json, 
+            # but it's good for logging.
             url, commit = load_repo_from_corpus(cj)
-            targets.append((url, commit))
+            targets.append((d, cj, url, commit))
         except Exception as e:
             logger.warning(f"Skipping {d} due to: {e}")
 
     logger.info(f"Found {len(targets)} repos with non-empty corpora to ingest")
 
-    for url, commit in targets:
-        repo = LeanGitRepo(url, commit)
-        logger.info(f"Ingesting {url}@{commit}")
-        status = add_repo_to_database(str(db_path), repo, db)
-        logger.info(f"Status for {url}: {status}")
+    from dynamic_database import Repository
+    import requests
+    import re
+
+    def get_lean_version_from_github(url, commit):
+        """Fetch lean-toolchain from GitHub and parse version."""
+        try:
+            raw_url = url.replace("github.com", "raw.githubusercontent.com")
+            config_url = f"{raw_url}/{commit}/lean-toolchain"
+            response = requests.get(config_url, timeout=10)
+            if response.status_code == 200:
+                content = response.text.strip()
+                # Parse version like "leanprover/lean4:v4.8.0" -> "v4.8.0"
+                match = re.search(r"leanprover/lean4:(.+)", content)
+                if match:
+                    return match.group(1)
+                return content # Fallback to full string if regex fails
+        except Exception as e:
+            logger.warning(f"Failed to fetch lean-toolchain for {url}@{commit}: {e}")
+        return "v4.0.0" # Ultimate fallback
+
+    for d, cj, url, commit in targets:
+        logger.info(f"Ingesting {url}@{commit} from {d}")
+        
+        # 1. Read metadata.json
+        meta_path = d / "metadata.json"
+        meta = {}
+        if meta_path.exists():
+            try:
+                with open(meta_path, "r") as f:
+                    meta = json.load(f)
+            except Exception as e:
+                logger.error(f"Failed to read metadata for {d}: {e}")
+
+        # 2. Construct Repository data
+        from_repo = meta.get("from_repo", {})
+        repo_url = from_repo.get("url", url)
+        repo_commit = from_repo.get("commit", commit)
+        
+        date_processed = meta.get("date_processed")
+        if not date_processed:
+             date_processed = meta.get("creation_time", "2024-01-01T00:00:00.000000")
+
+        lean_dojo_ver = meta.get("lean_dojo_version") or meta.get("leandojo_version", "0.0.1")
+        
+        # Fetch REAL Lean version if missing
+        lean_ver = meta.get("lean_version")
+        if not lean_ver:
+            logger.info(f"Fetching real Lean version for {repo_url}...")
+            lean_ver = get_lean_version_from_github(repo_url, repo_commit)
+            logger.info(f"Got version: {lean_ver}")
+
+        # Create dummy theorems folder if missing
+        theorems_dir = d / "random"
+        if not theorems_dir.exists():
+            theorems_dir.mkdir(parents=True, exist_ok=True)
+
+        repo_data = {
+            "url": repo_url,
+            "name": repo_url.split("/")[-1] if repo_url else d.name.split("_")[0],
+            "commit": repo_commit,
+            "lean_version": lean_ver,
+            "lean_dojo_version": lean_dojo_ver,
+            "metadata": {
+                "date_processed": date_processed
+            },
+            "theorems_folder": str(theorems_dir),
+            "premise_files_corpus": str(cj),
+            "files_traced": str(d / "traced_files.jsonl")
+        }
+
+        # 3. Add to DB
+        try:
+            repo = Repository.from_dict(repo_data)
+            db.add_repository(repo)
+            logger.info(f"Successfully added {repo_url} to DB")
+        except Exception as e:
+            logger.error(f"Failed to add repo {repo_url} to DB: {e}")
+
+    # Save updated database
+    logger.info(f"Saving database with {len(db.repositories)} repositories to {db_path}")
+    db.to_json(str(db_path))
 
     # Export merged dataset
     out_dir = raid_dir / "data" / "merged_paper_subset"
