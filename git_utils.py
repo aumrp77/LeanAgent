@@ -430,6 +430,47 @@ def add_repo_to_database(dynamic_database_json_path, repo, db):
         _pause_after_trace(normalized_url, status)
         return status
 
+    # CHECK FOR EXISTING DATA
+    dir_name = repo.url.split("/")[-1] + "_" + sha
+    dst_dir = os.path.join(DATA_DIR, dir_name)
+    if os.path.exists(os.path.join(dst_dir, "metadata.json")):
+        logger.info(f"Found existing data at {dst_dir}. SKIPPING TRACE and reusing data.")
+        
+        # Load metadata to get stats (optional but good for logging)
+        with open(os.path.join(dst_dir, "metadata.json"), "r") as f:
+            meta = json.load(f)
+
+        # Start constructing the Repository from the existing files
+        config = repo.get_config("lean-toolchain")
+        v = generate_benchmark_lean4.get_lean4_version_from_config(config["content"])
+        theorems_folder = os.path.join(dst_dir, "random")
+        premise_files_corpus = os.path.join(dst_dir, "corpus.jsonl")
+        files_traced = os.path.join(dst_dir, "traced_files.jsonl")
+        
+        pr_url = None
+        data = {
+            "url": repo.url,
+            "name": "/".join(repo.url.split("/")[-2:]),
+            "commit": repo.commit,
+            "lean_version": v,
+            "lean_dojo_version": lean_dojo.__version__,
+            "metadata": {
+                "date_processed": datetime.now(),
+            },
+            "theorems_folder": theorems_folder,
+            "premise_files_corpus": premise_files_corpus,
+            "files_traced": files_traced,
+            "pr_url": pr_url,
+        }
+
+        repo = Repository.from_dict(data)
+        logger.info("Adding existing repo to DB:")
+        db.add_repository(repo)
+        db.to_json(dynamic_database_json_path)
+        status = "success"
+        _pause_after_trace(normalized_url, status)
+        return status
+
     # Ensure that the repo is checked out to the compatible commit
     repo_name, _ = clone_repo(url)
     subprocess.run(["git", "-C", repo_name, "checkout", sha], check=True)
@@ -437,8 +478,10 @@ def add_repo_to_database(dynamic_database_json_path, repo, db):
     
     
     repo = LeanGitRepo(normalized_url, sha)
-    dir_name = repo.url.split("/")[-1] + "_" + sha
-    dst_dir = os.path.join(DATA_DIR, dir_name)
+    
+
+
+
     logger.info(f"Generating benchmark at {dst_dir}")
     
     traced_repo, num_premises, num_files_traced, total_theorems = generate_benchmark_lean4.main(

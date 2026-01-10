@@ -468,7 +468,12 @@ class PremiseRetriever(pl.LightningModule):
 
         self.predict_step_outputs.clear()
         logger.info("About to call barrier")
-        barrier()
+        
+        # Only call barrier if distributed training is initialized
+        if torch.distributed.is_available() and torch.distributed.is_initialized():
+            barrier()
+        else:
+            logger.info("Distributed training not initialized, skipping barrier")
 
         if self.trainer.is_global_zero:
             logger.info("All GPUs have completed their predictions and saved the data.")

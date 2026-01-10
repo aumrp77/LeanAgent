@@ -145,3 +145,6 @@ lean_dojo/
 *.log
 .lake/
 **/.wt-lean48*
+raid_data.tar.gz
+*.pickle
+*.tar.gz
