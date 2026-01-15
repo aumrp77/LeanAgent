@@ -639,7 +639,7 @@ def main():
         use_fisher = True  # FIXED: Enable EWC for lifelong learning
         single_repo = False  # FIXED: Enable cumulative learning across repos
         curriculum_learning = False  # DISABLED: db_file.txt already has all 23 repos loaded
-        num_repos = 3  # FIXED: Full paper reproduction (was 3)
+        num_repos = 23  # Full lifelong learning across all repos
         dynamic_database_json_path = os.path.join(RAID_DIR, DB_FILE_NAME)
 
         lambdas = None
@@ -747,11 +747,26 @@ def main():
                         "num_retrieved": 100,
                     }
 
-                    model = PremiseRetriever.load(
-                        model_checkpoint_path, device, freeze=False, config=config
-                    )
+                    # Try to load checkpoint, fallback to HuggingFace if not exists
+                    if model_checkpoint_path and os.path.exists(model_checkpoint_path):
+                        model = PremiseRetriever.load(
+                            model_checkpoint_path, device, freeze=False, config=config
+                        )
+                        logger.info(f"Loaded premise retriever from checkpoint: {model_checkpoint_path}")
+                    else:
+                        # No checkpoint - initialize from HuggingFace
+                        logger.info(f"No checkpoint found. Initializing from HuggingFace: {config['model_name']}")
+                        model = PremiseRetriever(
+                            model_name=config["model_name"],
+                            lr=config["lr"],
+                            warmup_steps=config["warmup_steps"],
+                            max_seq_len=config["max_seq_len"],
+                            num_retrieved=config["num_retrieved"]
+                        )
+                        model = model.to(device)
+                        logger.info("Model initialized from HuggingFace successfully")
+                    
                     model.train()
-                    logger.info(f"Loaded premise retriever at {model_checkpoint_path}")
 
                     # Load previous Fisher Information Matrix for current EWC
                     if use_fisher:
@@ -891,10 +906,12 @@ def main():
                         try:
                             logger.info("hit the barrier before training")
                             trainer.strategy.barrier()
+                            # Only pass ckpt_path if we're resuming from an existing checkpoint
+                            ckpt_path_to_use = model_checkpoint_path if (model_checkpoint_path and os.path.exists(model_checkpoint_path)) else None
                             trainer.fit(
                                 model,
                                 datamodule=data_module,
-                                ckpt_path=model_checkpoint_path,
+                                ckpt_path=ckpt_path_to_use,
                             )
                             logger.info("hit the barrier after training")
                             trainer.strategy.barrier()
@@ -920,6 +937,7 @@ def main():
                         logger.error(f"No checkpoint found: {str(e)}")
                         logger.warning("Using the current model state.")
                         best_model = model
+                        best_model_path = None  # Set to None when no checkpoint found
 
                     best_model.eval()
 
@@ -938,6 +956,14 @@ def main():
                     for data_path in testing_paths:
                         if "merged" not in data_path:
                             continue
+
+                        # If no checkpoint was saved, we need to save the current model for testing
+                        if best_model_path is None:
+                            logger.warning("No checkpoint found - saving current model state for testing")
+                            temp_ckpt_path = os.path.join(CHECKPOINT_DIR, f"temp_model_repo_{i}.ckpt")
+                            trainer.save_checkpoint(temp_ckpt_path)
+                            best_model_path = temp_ckpt_path
+                            logger.info(f"Saved temporary checkpoint: {temp_ckpt_path}")
 
                         run_cli(best_model_path, data_path)
                         if is_main_process:
