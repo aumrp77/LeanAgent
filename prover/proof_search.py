@@ -386,7 +386,7 @@ class VllmActor:
 
 def find_latest_checkpoint(raid_dir, checkpoint_dir):
     """Finds the most recent checkpoint."""
-    checkpoint_dir = raid_dir + "/" + checkpoint_dir
+    # checkpoint_dir is already an absolute path, don't concatenate with raid_dir
     all_checkpoints = [
         os.path.join(checkpoint_dir, f)
         for f in os.listdir(checkpoint_dir)

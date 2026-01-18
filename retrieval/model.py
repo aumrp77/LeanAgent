@@ -351,7 +351,9 @@ class PremiseRetriever(pl.LightningModule):
                 else:
                     r = float(TP) / len(all_pos_premises)
                 msg = f"Recall@{self.num_retrieved}: {r}\n\nGround truth:\n\n```\n{msg_gt}\n```\n\nRetrieved:\n\n```\n{msg_retrieved}\n```"
-                tb.add_text(f"premises_val", msg, self.global_step)
+                # Only log if TensorBoard logger is available (not CSV logger)
+                if hasattr(tb, 'add_text'):
+                    tb.add_text(f"premises_val", msg, self.global_step)
 
             all_pos_premises = set(all_pos_premises)
             if len(all_pos_premises) == 0:

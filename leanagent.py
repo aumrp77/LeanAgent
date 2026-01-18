@@ -636,7 +636,7 @@ def main():
         current_epoch = 0
         epochs_per_repo = 1  # Paper specification: "train for an additional one epoch"
         run_progressive_training = True
-        use_fisher = True  # FIXED: Enable EWC for lifelong learning
+        use_fisher = False  # Main LeanAgent does NOT use EWC (causes excessive plasticity). EWC only for ablations.
         single_repo = False  # FIXED: Enable cumulative learning across repos
         curriculum_learning = False  # DISABLED: db_file.txt already has all 23 repos loaded
         num_repos = 23  # Full lifelong learning across all repos
@@ -1034,13 +1034,12 @@ def main():
                         # Create Fisher computation module with current best model
                         fisher_module = FisherComputationModule(best_model)
                         
-                        # Setup trainer for Fisher computation
+                        # Setup trainer for Fisher computation (no DDP needed for single GPU)
                         fisher_trainer = pl.Trainer(
                             accelerator="gpu",
-                            precision="bf16-mixed",
-                            strategy=ddp_strategy,
                             devices=1,
-                            max_epochs=10,
+                            precision="bf16-mixed",
+                            max_epochs=1,  # Only need 1 epoch to compute Fisher matrix
                             log_every_n_steps=1,
                             num_sanity_val_steps=0,
                         )
@@ -1081,7 +1080,8 @@ def main():
                     max_expansions = None
                     num_sampled_tactics = 64
                     debug = False
-                    ckpt_path = f"{RAID_DIR}/model_lightning.ckpt"
+                    # Use the best checkpoint from training, not a hardcoded path
+                    ckpt_path = best_model_path
                     prover = DistributedProver(
                         use_vllm,
                         ckpt_path,
